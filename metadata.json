@@ -1,0 +1,8 @@
+{
+  "name": "Thầy.AI 50",
+  "description": "A Zen companion inspired by Thích Nhất Hạnh",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
