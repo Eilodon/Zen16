@@ -1,15 +1,23 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+  },
+  define: {
+    'process.env.API_KEY': 'import.meta.env.VITE_GEMINI_API_KEY',
+  },
   server: {
     host: '0.0.0.0',
+    port: 5000,
+    allowedHosts: true,
     hmr: {
       clientPort: 443,
-    }
+    },
   },
-  // Security Note: We strictly DO NOT use 'define' for process.env.API_KEY here.
-  // The key must be injected at runtime by the environment (window.aistudio) to prevent leaking in the build bundle.
 });

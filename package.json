@@ -1,5 +1,5 @@
 {
-  "name": "thầy.ai-50",
+  "name": "thay-ai",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "scheduler": "^0.23.2",
     "@google/genai": "^1.32.0",
     "lucide-react": "^0.559.0",
@@ -19,13 +19,12 @@
     "@react-three/drei": "^9.120.0",
     "tone": "^14.7.77",
     "zustand": "^5.0.3",
-    "vite": "^7.2.7",
-    "@vitejs/plugin-react": "^5.1.2",
     "onnxruntime-web": "1.17.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
