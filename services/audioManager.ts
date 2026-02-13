@@ -102,10 +102,10 @@ export class RobustVoiceDetector {
   private calculateFilterCoeffs() {
      // Simple 1st order High-pass at 300Hz to kill motorbike rumble
      // rc = 1 / (2 * pi * fc)
-     const rc = 1.0 / (300 * 2 * Math.PI);
+     const fc = 300;
+     const rc = 1.0 / (fc * 2 * Math.PI);
      const dt = 1.0 / this.sampleRate;
-     const alpha = rc / (rc + dt);
-     this.a1 = alpha;
+     this.a1 = rc / (rc + dt);
   }
 
   private applyFilter(sample: number): number {

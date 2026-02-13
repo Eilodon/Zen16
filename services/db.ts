@@ -46,9 +46,9 @@ export const dbService = {
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
       request.onsuccess = () => {
-        // Sort by timestamp desc locally since IDB sort is key-based
-        const results = request.result as IDBConversation[];
-        resolve(results.sort((a, b) => a.timestamp - b.timestamp));
+        // Sort by timestamp desc locally
+        const results = (request.result || []) as IDBConversation[];
+        resolve(results.sort((a, b) => b.timestamp - a.timestamp));
       };
       request.onerror = () => reject(request.error);
     });

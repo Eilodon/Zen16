@@ -180,7 +180,7 @@ export const sendZenTextQuery = async (
   
   const validKey = await validateAndGetApiKey();
 
-  return withRetry(async () => {
+    return withRetry(async () => {
       const ai = getClient(validKey);
       const formality = mode === 'VN' ? 'Use "Thầy" (Teacher) and "con" (child/disciple).' : 'Use warm, direct tone.';
       
@@ -197,8 +197,11 @@ export const sendZenTextQuery = async (
         Output: JSON matching schema.
       `;
 
+      // Use a more stable model name if 'gemini-3-pro-preview' is not valid
+      const modelName = 'gemini-2.0-flash'; 
+
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: modelName,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -418,7 +421,7 @@ export class ZenLiveSession {
       flushTextQueue(key, this.mode, this.lang);
 
       this.sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: 'gemini-2.0-flash-exp', // Updated to a more standard experimental model name
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
