@@ -120,8 +120,12 @@ export default function AudioEngine({
         droneSynth.current?.start();
         droneSynth.current?.volume.rampTo(-30, fadeTime);
       }
-      // 'bell' is usually a one-shot, we handle it as silence for continuous loop
-      // 'silence' falls through here (stopped)
+      else if (ambientSound === 'bell') {
+        // One-shot bell trigger
+        const bell = new Tone.MetalSynth().toDestination();
+        bell.triggerAttackRelease("C4", "8n");
+        setTimeout(() => bell.dispose(), 2000);
+      }
       
     } catch (e) {
       console.warn("Audio engine state error", e);
