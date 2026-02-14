@@ -47,33 +47,40 @@ export default function AudioEngine({
 
   // 1. Initialization
   useEffect(() => {
+    let isDisposed = false;
     const initAudio = async () => {
-      await getSharedAudioContext();
-      
-      masterVol.current = new Tone.Volume(0).toDestination();
+      try {
+        await getSharedAudioContext();
+        if (isDisposed) return;
+        
+        masterVol.current = new Tone.Volume(0).toDestination();
 
-      // Rain / Monsoon Generator (Brown Noise)
-      rainSynth.current = new Tone.Noise("brown");
-      rainFilter.current = new Tone.AutoFilter({
-        frequency: 0.5,
-        baseFrequency: 400,
-        octaves: 2
-      }).connect(masterVol.current);
-      rainSynth.current.connect(rainFilter.current);
-      rainSynth.current.volume.value = -20;
+        // Rain / Monsoon Generator (Brown Noise)
+        rainSynth.current = new Tone.Noise("brown");
+        rainFilter.current = new Tone.AutoFilter({
+          frequency: 0.5,
+          baseFrequency: 400,
+          octaves: 2
+        }).connect(masterVol.current);
+        rainSynth.current.connect(rainFilter.current);
+        rainSynth.current.volume.value = -20;
 
-      // Drone Generator (Mekong/Bowl)
-      droneSynth.current = new Tone.Oscillator(110, "sine"); // A2
-      droneLfo.current = new Tone.LFO(0.1, 108, 112).connect(droneSynth.current.frequency);
-      droneSynth.current.connect(masterVol.current);
-      droneSynth.current.volume.value = -20;
+        // Drone Generator (Mekong/Bowl)
+        droneSynth.current = new Tone.Oscillator(110, "sine"); // A2
+        droneLfo.current = new Tone.LFO(0.1, 108, 112).connect(droneSynth.current.frequency);
+        droneSynth.current.connect(masterVol.current);
+        droneSynth.current.volume.value = -20;
 
-      setInitialized(true);
+        setInitialized(true);
+      } catch (err) {
+        console.error("Audio Engine Init Error:", err);
+      }
     };
 
     initAudio();
 
     return () => {
+      isDisposed = true;
       rainSynth.current?.dispose();
       rainFilter.current?.dispose();
       droneSynth.current?.dispose();
