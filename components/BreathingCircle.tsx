@@ -117,12 +117,13 @@ export const BreathingCircle: React.FC<Props> = ({ type, isActive, onComplete })
 
       {/* Main Circle */}
       <div 
-        className={`rounded-full bg-gradient-to-br ${phaseColor[phase]} shadow-[0_0_60px_rgba(255,255,255,0.15)] flex items-center justify-center transition-all ease-in-out`}
+        className={`rounded-full bg-gradient-to-br ${phaseColor[phase]} shadow-[0_0_80px_rgba(255,255,255,0.2)] flex items-center justify-center transition-all ease-in-out`}
         style={{
-          width: '160px',
-          height: '160px',
+          width: '200px',
+          height: '200px',
           transform: `scale(${getScale()})`,
-          transitionDuration: getTransitionDuration()
+          transitionDuration: getTransitionDuration(),
+          boxShadow: phase === 'inhale' ? '0 0 100px rgba(255,255,255,0.4)' : '0 0 60px rgba(255,255,255,0.1)'
         }}
       >
         <span className="text-white font-bold text-6xl tabular-nums drop-shadow-md">

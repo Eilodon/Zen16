@@ -23,10 +23,11 @@ export const QuoteCard: React.FC<Props> = ({ data }) => {
   }, [data]);
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-xl shadow-orange-900/5 border border-white/60 p-6 md:p-8 w-full animate-[fadeIn_400ms_ease-out] relative overflow-hidden transition-all duration-300 group">
+    <div className="bg-white/70 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl shadow-orange-900/10 border border-white/50 p-6 md:p-10 w-full animate-[fadeIn_600ms_cubic-bezier(0.22,1,0.36,1)] relative overflow-hidden transition-all duration-500 group hover:shadow-orange-900/20">
       
-      {/* Decorative Blur blob */}
-      <div className="absolute -top-10 -right-10 w-32 h-32 bg-orange-200/30 rounded-full blur-3xl pointer-events-none group-hover:bg-orange-300/30 transition-colors duration-1000"></div>
+      {/* Decorative Blur blobs */}
+      <div className="absolute -top-16 -right-16 w-48 h-48 bg-orange-200/40 rounded-full blur-3xl pointer-events-none group-hover:bg-orange-300/40 transition-colors duration-1000 animate-pulse"></div>
+      <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-blue-100/30 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-200/30 transition-colors duration-1000"></div>
 
       {/* Header Tags */}
       <div className="flex items-center justify-between mb-6 relative z-10">
