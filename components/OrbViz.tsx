@@ -367,8 +367,8 @@ const SwarmParticles = ({ count = 60, emotion, frequencyData }: { count?: number
 export default function OrbViz({ analyser, emotion, frequencyData }: OrbProps) {
   const [isVisible, setIsVisible] = useState(true);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const detail = isMobile ? 30 : 60; // Slightly lower poly for liquid shader performance
-  const particleCount = isMobile ? 50 : 100;
+    const detail = isMobile ? 20 : 40; // Optimization: Lowered poly count for production stability
+    const particleCount = isMobile ? 30 : 60; // Optimization: Fewer particles for better frame consistency
 
   useEffect(() => {
     const handleVisibilityChange = () => setIsVisible(document.visibilityState === 'visible');
