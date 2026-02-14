@@ -15,7 +15,7 @@ export const getSharedAudioContext = async (): Promise<AudioContext> => {
     sharedContext = new AudioContextClass({
       // REMOVED sampleRate: 24000 to avoid OverconstrainedError on mobile devices.
       // Let browser/hardware decide the native rate (44.1k/48k).
-      latencyHint: 'interactive'
+      latencyHint: 'balanced' // Changed from 'interactive' to 'balanced' for better stability on lower-end devices
     });
     
     // CRITICAL: Sync Tone.js to use this same context

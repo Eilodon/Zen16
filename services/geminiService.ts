@@ -531,8 +531,12 @@ export class ZenLiveSession {
       this.isAiSpeaking = true; 
       this.onAudioActivity(true);
       const base64 = modelTurn.parts[0].inlineData.data;
-      const audioData = this.decodeBase64ToFloat32(base64);
-      this.scheduleAudioChunk(audioData);
+      try {
+        const audioData = this.decodeBase64ToFloat32(base64);
+        this.scheduleAudioChunk(audioData);
+      } catch (err) {
+        console.error("Audio Decode/Schedule Error:", err);
+      }
     }
 
     if (message.serverContent?.interrupted) {
