@@ -23,10 +23,13 @@ export const VoiceButton: React.FC<Props> = ({ state, onClick }) => {
   };
 
   return (
-    <div className="relative flex items-center justify-center group touch-manipulation">
+    <div className="relative flex items-center justify-center group touch-manipulation scale-110 md:scale-125">
       {/* Outer Ripple (Listening) */}
       {isListening && (
-        <div className="absolute inset-0 rounded-full bg-red-500/10 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" />
+        <>
+          <div className="absolute inset-0 rounded-full bg-red-500/20 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]" />
+          <div className="absolute inset-[-20px] rounded-full border border-red-200/30 animate-[pulse_3s_ease-in-out_infinite]" />
+        </>
       )}
       
       {/* Glow (Speaking) */}

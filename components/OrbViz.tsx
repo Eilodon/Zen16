@@ -118,8 +118,8 @@ const vertexShader = `
     float combinedNoise = (noiseLow * 0.7 + noiseHigh * 0.3);
     
     // Audio reactivity
-    float displacement = combinedNoise * (0.08 + uIntensity * 0.1 + uAudioLow * 0.25);
-    displacement += noiseHigh * uAudioHigh * 0.08; // High freqs add sharp ripples
+    float displacement = combinedNoise * (0.08 + uIntensity * 0.15 + uAudioLow * 0.35);
+    displacement += noiseHigh * uAudioHigh * 0.12; // High freqs add sharper ripples
 
     vDisplacement = combinedNoise;
     
