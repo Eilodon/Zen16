@@ -76,8 +76,8 @@ export const useZenStore = create<ZenSessionState>((set) => ({
   setStatus: (status) => set({ status }),
   setConnectionState: (state) => set({ connectionState: state }),
   setZenData: (data) => set({ zenData: data }),
-  setHistory: (history) => set({ history }),
-  addToHistory: (entry) => set((state) => ({ history: [...state.history, entry] })),
+  setHistory: (history) => set({ history: history.slice(-50) }),
+  addToHistory: (entry) => set((state) => ({ history: [...state.history, entry].slice(-50) })),
   incrementConnectionAttempts: () => set((state) => ({ connectionAttempts: state.connectionAttempts + 1 })),
   resetConnectionAttempts: () => set({ connectionAttempts: 0 }),
   

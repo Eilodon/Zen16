@@ -197,7 +197,7 @@ export const sendZenTextQuery = async (
         Output: JSON matching schema.
       `;
 
-      // Use a more stable model name if 'gemini-3-pro-preview' is not valid
+      // Production-ready model selection
       const modelName = 'gemini-2.0-flash'; 
 
       const response = await ai.models.generateContent({
@@ -240,7 +240,13 @@ export const sendZenTextQuery = async (
               ambient_sound: { type: Type.STRING, enum: ['rain', 'bowl', 'bell', 'silence', 'mekong', 'monsoon'] }
             },
             required: ['emotion', 'wisdom_text', 'quantum_metrics', 'reasoning_steps', 'awareness_stage', 'consciousness_dimensions']
-          }
+          },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_LOW_AND_ABOVE' }
+          ]
         }
       });
 
