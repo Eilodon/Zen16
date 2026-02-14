@@ -117,6 +117,8 @@ export class RobustVoiceDetector {
   }
 
   public process(float32Array: Float32Array): boolean {
+    if (!float32Array || float32Array.length === 0) return false;
+
     // 1. Pre-processing: Filter out low freq noise
     let sum = 0;
     const len = float32Array.length;
@@ -127,7 +129,7 @@ export class RobustVoiceDetector {
        if (i % 2 === 0) sum += filtered * filtered; // Downsample RMS calc slightly
     }
     
-    const rms = Math.sqrt(sum / (len / 2));
+    const rms = Math.sqrt(sum / (len / 2)) || 0;
 
     // 2. Adaptive Thresholding
     // Adapt to background noise slowly, but not to speech
