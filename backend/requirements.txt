@@ -1,8 +1,7 @@
-google-adk
-vertexai
+google-genai>=1.0.0
 google-cloud-firestore
 google-cloud-pubsub
 google-cloud-storage
-fastapi
-uvicorn
+fastapi[standard]
+uvicorn[standard]
 websockets
