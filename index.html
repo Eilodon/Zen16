@@ -76,6 +76,13 @@
       background: #d6d3d1;
       border-radius: 4px;
     }
+    .animate-spin-slow {
+      animation: spin 3s linear infinite;
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(249,115,22,0.3); }
+      50% { box-shadow: 0 0 24px rgba(249,115,22,0.6); }
+    }
   </style>
 </head>
 <body class="bg-stone-50 text-stone-900 h-screen w-screen overflow-hidden">
