@@ -1,0 +1,8 @@
+google-adk
+vertexai
+google-cloud-firestore
+google-cloud-pubsub
+google-cloud-storage
+fastapi
+uvicorn
+websockets
