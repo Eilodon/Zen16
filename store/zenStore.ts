@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { AppState, ZenResponse, CulturalMode, Language, InputMode, ConversationEntry, ConnectionState } from '../types';
+import { AppState, ZenResponse, CulturalMode, Language, InputMode, ConversationEntry, ConnectionState, RealtimeMetrics } from '../types';
 
 export type PermissionStatus = 'idle' | 'prompting' | 'granted' | 'denied';
 
@@ -42,6 +42,7 @@ interface ZenSessionState {
   // Permissions State
   micStatus: PermissionStatus;
   cameraStatus: PermissionStatus;
+  metrics: RealtimeMetrics;
 
   setStatus: (status: AppState) => void;
   setConnectionState: (state: ConnectionState) => void;
@@ -53,7 +54,30 @@ interface ZenSessionState {
 
   setMicStatus: (status: PermissionStatus) => void;
   setCameraStatus: (status: PermissionStatus) => void;
+  resetMetrics: () => void;
+  updateMetrics: (updater: (metrics: RealtimeMetrics) => RealtimeMetrics) => void;
 }
+
+const initialMetrics: RealtimeMetrics = {
+  sessionsStarted: 0,
+  currentSessionStartedAt: null,
+  lastTtfbMs: null,
+  avgTtfbMs: null,
+  ttfbSamples: 0,
+  interruptions: 0,
+  lastInterruptionAt: null,
+  lastInterruptionRecoveryMs: null,
+  avgInterruptionRecoveryMs: null,
+  interruptionRecoverySamples: 0,
+  reconnectAttempts: 0,
+  reconnectSuccesses: 0,
+  authRequests: 0,
+  authFailures: 0,
+  visionFramesSent: 0,
+  visionFramesDropped: 0,
+};
+
+const cloneInitialMetrics = (): RealtimeMetrics => ({ ...initialMetrics });
 
 export const useUIStore = create<UIState>((set) => ({
   culturalMode: 'Universal',
@@ -86,6 +110,7 @@ export const useZenStore = create<ZenSessionState>((set) => ({
 
   micStatus: 'idle',
   cameraStatus: 'idle',
+  metrics: cloneInitialMetrics(),
 
   setStatus: (status) => set({ status }),
   setConnectionState: (state) => set({ connectionState: state }),
@@ -97,4 +122,6 @@ export const useZenStore = create<ZenSessionState>((set) => ({
 
   setMicStatus: (status) => set({ micStatus: status }),
   setCameraStatus: (status) => set({ cameraStatus: status }),
+  resetMetrics: () => set({ metrics: cloneInitialMetrics() }),
+  updateMetrics: (updater) => set((state) => ({ metrics: updater(state.metrics) })),
 }));

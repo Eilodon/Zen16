@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { telemetry } from './telemetry';
 
 const RAW_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'ws://localhost:8080';
 const BACKEND_HTTP_URL = RAW_BACKEND_URL.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
@@ -136,11 +137,13 @@ export const getWebSocketAccessToken = async (): Promise<string | null> => {
   const idToken = await getIdentityToken();
   if (!idToken) {
     if (authRequired) {
+      telemetry.markAuthFailure();
       throw new Error('AUTH_REQUIRED');
     }
     return null;
   }
 
+  telemetry.markAuthRequest();
   const response = await fetch(AUTH_TOKEN_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -150,12 +153,14 @@ export const getWebSocketAccessToken = async (): Promise<string | null> => {
 
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
+      telemetry.markAuthFailure();
       throw new Error('AUTH_REQUIRED');
     }
     if (!authRequired) {
       console.warn(`[Zen16 Auth] WS token issuer unavailable (${response.status}), continuing without token.`);
       return null;
     }
+    telemetry.markAuthFailure();
     throw new Error(`AUTH_ISSUER_FAILED:${response.status}`);
   }
 
@@ -165,6 +170,7 @@ export const getWebSocketAccessToken = async (): Promise<string | null> => {
       console.warn('[Zen16 Auth] WS token issuer returned invalid payload, continuing without token.');
       return null;
     }
+    telemetry.markAuthFailure();
     throw new Error('AUTH_ISSUER_INVALID_RESPONSE');
   }
 

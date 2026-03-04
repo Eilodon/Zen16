@@ -20,6 +20,27 @@ export function useZenSession({
   // Select state from stores to avoid prop drilling
   const { culturalMode, language, setInputMode, setEmergencyActive } = useUIStore();
   const { status, setStatus, setZenData, setConnectionState } = useZenStore();
+  const text = React.useMemo(() => (language === 'vi'
+    ? {
+      fallbackToText: "Kết nối với thế giới tạm ngưng. Mời bạn nhập chữ (Nội quán).",
+      idleTimeout: "Phiên kết thúc trong tĩnh lặng (Tự động)",
+      noMicPermission: "Không có quyền Microphone. Đã chuyển sang chế độ Chat.",
+      noMicFound: "Không tìm thấy Microphone.",
+      authRequired: "Bạn cần đăng nhập để bắt đầu phiên voice bảo mật.",
+      tokenIssuerFailed: "Không thể xin token phiên. Vui lòng thử lại sau.",
+      apiKeyMissing: "Vui lòng nhập API Key.",
+      cannotProcess: "Không thể xử lý yêu cầu",
+    }
+    : {
+      fallbackToText: "Live connection paused. Please continue in text mode.",
+      idleTimeout: "Session ended due to inactivity",
+      noMicPermission: "Microphone permission denied. Switched to chat mode.",
+      noMicFound: "No microphone was detected.",
+      authRequired: "Please sign in to start a secure voice session.",
+      tokenIssuerFailed: "Unable to mint a session token. Please try again later.",
+      apiKeyMissing: "Please provide an API key.",
+      cannotProcess: "Unable to process the request.",
+    }), [language]);
 
   const liveSessionRef = useRef<ZenLiveSession | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -34,13 +55,13 @@ export function useZenSession({
 
     // Fallback if connection fails permanently
     if (reason === "FALLBACK_TO_TEXT") {
-      onError("Kết nối với thế giới tạm ngưng. Mời bạn nhập chữ (Nội quán).", "info");
+      onError(text.fallbackToText, "info");
       setInputMode('text');
       haptic('warn');
       setConnectionState('disconnected');
     } else if (reason) {
       const mindfulReason = reason === "Timeout due to inactivity"
-        ? "Phiên kết thúc trong tĩnh lặng (Tự động)"
+        ? text.idleTimeout
         : reason;
       onError(mindfulReason, "info");
       setConnectionState('disconnected');
@@ -52,7 +73,7 @@ export function useZenSession({
     liveSessionRef.current = null;
     analyserRef.current = null;
     setStatus('idle');
-  }, [onError, setStatus, setInputMode, setConnectionState]);
+  }, [onError, setStatus, setInputMode, setConnectionState, text]);
 
   // Handle incoming data updates from Gemini
   const handleStateChange = React.useCallback((data: Partial<ZenResponse>) => {
@@ -112,19 +133,19 @@ export function useZenSession({
 
       // Specific Error Handling
       if (e.message.includes("PermissionDenied")) {
-        onError("Không có quyền Microphone. Đã chuyển sang chế độ Chat.", "info");
+        onError(text.noMicPermission, "info");
         setInputMode('text'); // Auto-switch to text
       } else if (e.message.includes("NoMicrophone")) {
-        onError("Không tìm thấy Microphone.", "info");
+        onError(text.noMicFound, "info");
         setInputMode('text');
       } else if (e.message.includes("AUTH_REQUIRED")) {
-        onError("Bạn cần đăng nhập để bắt đầu phiên voice bảo mật.", "warn");
+        onError(text.authRequired, "warn");
         setInputMode('text');
       } else if (e.message.includes("AUTH_ISSUER_FAILED")) {
-        onError("Không thể xin token phiên. Vui lòng thử lại sau.", "error");
+        onError(text.tokenIssuerFailed, "error");
         setInputMode('text');
       } else if (e.message.includes("API_KEY_MISSING")) {
-        onError("Vui lòng nhập API Key.", "warn");
+        onError(text.apiKeyMissing, "warn");
       } else {
         // Silently fail connection errors to text mode
         setInputMode('text');
@@ -132,7 +153,7 @@ export function useZenSession({
 
       liveSessionRef.current?.disconnect();
     }
-  }, [status, culturalMode, language, handleStateChange, handleDisconnect, onError, setStatus, setConnectionState, setInputMode]);
+  }, [status, culturalMode, language, handleStateChange, handleDisconnect, onError, setStatus, setConnectionState, setInputMode, text]);
 
   // Manual Disconnect
   const disconnect = React.useCallback(() => {
@@ -162,14 +183,14 @@ export function useZenSession({
     } catch (e: any) {
       console.error(e);
       if (e.message.includes("API_KEY_MISSING")) {
-        onError("Vui lòng nhập API Key để tiếp tục.", "warn");
+        onError(text.apiKeyMissing, "warn");
       } else {
-        onError("Không thể xử lý yêu cầu", "error");
+        onError(text.cannotProcess, "error");
       }
       setStatus('idle');
       return null;
     }
-  }, [culturalMode, language, onError, setStatus, setZenData]);
+  }, [culturalMode, language, onError, setStatus, setZenData, text]);
 
   return {
     connect,

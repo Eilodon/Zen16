@@ -37,7 +37,7 @@ const LotusIcon = ({ className = '' }: { className?: string }) => (
 
 export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
     const { requestMediaAccess } = usePermissions();
-    const { setUser, setIsOnboardingComplete } = useUIStore();
+    const { setUser, setIsOnboardingComplete, language, setLanguage } = useUIStore();
 
     const [step, setStep] = useState<'splash' | 'auth' | 'permissions'>('splash');
     const [progress, setProgress] = useState(0);
@@ -56,6 +56,79 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
     const [useCam, setUseCam] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const canUseFirebaseAuth = isFirebaseAuthAvailable && !!auth;
+    const copy = language === 'vi'
+        ? {
+            subtitle: 'Đồng hành tỉnh thức',
+            preparing: 'Đang chuẩn bị không gian tĩnh lặng...',
+            loginEmail: 'Đăng nhập bằng Email',
+            signup: 'Đăng ký thành viên mới',
+            or: 'hoặc',
+            loginGoogle: 'Đăng nhập với Google',
+            guest: 'Trải nghiệm ẩn danh (Guest)',
+            authUnavailable: 'Đăng nhập tạm thời chưa cấu hình, bạn vẫn có thể dùng chế độ Guest.',
+            authUnavailableShort: 'Đăng nhập tạm thời chưa khả dụng trên cấu hình hiện tại.',
+            googleFailed: 'Đăng nhập bằng Google thất bại. Vui lòng thử lại.',
+            genericAuthError: 'Đã có lỗi xảy ra. Hãy thở sâu và thử lại.',
+            emailUsed: 'Email này đã được sử dụng.',
+            wrongCredential: 'Email hoặc mật khẩu không chính xác.',
+            weakPassword: 'Mật khẩu quá yếu.',
+            invalidEmail: 'Email không hợp lệ.',
+            nameLabel: 'Tên gọi',
+            emailLabel: 'Email',
+            passwordLabel: 'Mật khẩu',
+            namePlaceholder: 'Tên của bạn',
+            emailPlaceholder: 'Email của bạn',
+            processing: 'Đang xử lý...',
+            login: 'Đăng nhập',
+            createAccount: 'Tạo tài khoản',
+            back: 'Quay lại',
+            setup: 'Thiết lập kết nối',
+            voice: 'Giọng nói',
+            voiceDesc: 'Để trò chuyện',
+            vision: 'Thị giác',
+            visionDesc: 'Đo nhịp thở & Căng thẳng',
+            booting: 'Đang khởi tạo...',
+            startJourney: 'Bắt đầu hành trình',
+            privacy: 'Mic/Camera xử lý trên thiết bị; xác thực và token phiên đi qua kết nối mã hóa.',
+            safety: 'Zen16 không thay thế tư vấn y tế hoặc chuyên gia tâm lý.',
+            guestName: 'Khách',
+        }
+        : {
+            subtitle: 'Mindful Companion',
+            preparing: 'Preparing a calm digital space...',
+            loginEmail: 'Sign in with Email',
+            signup: 'Create new account',
+            or: 'or',
+            loginGoogle: 'Continue with Google',
+            guest: 'Continue as Guest',
+            authUnavailable: 'Sign-in is not configured yet. You can continue in Guest mode.',
+            authUnavailableShort: 'Sign-in is not available in this environment.',
+            googleFailed: 'Google sign-in failed. Please try again.',
+            genericAuthError: 'Something went wrong. Please take a breath and try again.',
+            emailUsed: 'This email is already in use.',
+            wrongCredential: 'Incorrect email or password.',
+            weakPassword: 'Password is too weak.',
+            invalidEmail: 'Invalid email address.',
+            nameLabel: 'Display name',
+            emailLabel: 'Email',
+            passwordLabel: 'Password',
+            namePlaceholder: 'Your name',
+            emailPlaceholder: 'Your email',
+            processing: 'Processing...',
+            login: 'Sign in',
+            createAccount: 'Create account',
+            back: 'Back',
+            setup: 'Connection setup',
+            voice: 'Voice',
+            voiceDesc: 'For natural conversation',
+            vision: 'Vision',
+            visionDesc: 'Stress and posture awareness',
+            booting: 'Initializing...',
+            startJourney: 'Begin session',
+            privacy: 'Mic/camera are processed on-device; auth and session tokens use encrypted transport.',
+            safety: 'Zen16 does not replace medical advice or licensed mental healthcare.',
+            guestName: 'Guest',
+        };
 
     useEffect(() => {
         if (step === 'splash') {
@@ -75,13 +148,13 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
 
     const handleGuest = () => {
         haptic('success');
-        setUser({ name: 'Khách', email: '', isGuest: true });
+        setUser({ name: copy.guestName, email: '', isGuest: true });
         setStep('permissions');
     };
 
     const handleGoogleAuth = async () => {
         if (!auth) {
-            setAuthError('Đăng nhập tạm thời chưa khả dụng trên cấu hình hiện tại.');
+            setAuthError(copy.authUnavailableShort);
             return;
         }
 
@@ -100,7 +173,7 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
         } catch (error: any) {
             haptic('warn');
             console.error("Google Auth error:", error);
-            setAuthError('Đăng nhập bằng Google thất bại. Vui lòng thử lại.');
+            setAuthError(copy.googleFailed);
         } finally {
             setIsAuthenticating(false);
         }
@@ -109,7 +182,7 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
     const handleAuthSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!auth) {
-            setAuthError('Đăng nhập tạm thời chưa khả dụng trên cấu hình hiện tại.');
+            setAuthError(copy.authUnavailableShort);
             return;
         }
         if (!email || !password) return;
@@ -139,11 +212,11 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
             setStep('permissions');
         } catch (error: any) {
             haptic('warn');
-            let errorMsg = 'Đã có lỗi xảy ra. Hãy thở sâu và thử lại.';
-            if (error.code === 'auth/email-already-in-use') errorMsg = 'Email này đã được sử dụng.';
-            else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') errorMsg = 'Email hoặc mật khẩu không chính xác.';
-            else if (error.code === 'auth/weak-password') errorMsg = 'Mật khẩu quá yếu.';
-            else if (error.code === 'auth/invalid-email') errorMsg = 'Email không hợp lệ.';
+            let errorMsg = copy.genericAuthError;
+            if (error.code === 'auth/email-already-in-use') errorMsg = copy.emailUsed;
+            else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') errorMsg = copy.wrongCredential;
+            else if (error.code === 'auth/weak-password') errorMsg = copy.weakPassword;
+            else if (error.code === 'auth/invalid-email') errorMsg = copy.invalidEmail;
             setAuthError(errorMsg);
         } finally {
             setIsAuthenticating(false);
@@ -174,6 +247,20 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
             <div className="absolute bottom-1/3 right-1/4 w-48 h-48 rounded-full opacity-15 blur-3xl pointer-events-none"
                 style={{ background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)' }} />
 
+            <div className="absolute top-4 right-4 z-10">
+                <button
+                    onClick={() => setLanguage(language === 'vi' ? 'en' : 'vi')}
+                    className="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all duration-200 hover:opacity-90"
+                    style={{
+                        background: 'rgba(255,255,255,0.82)',
+                        color: '#57534e',
+                        borderColor: 'rgba(120,113,108,0.12)',
+                    }}
+                >
+                    {language === 'vi' ? 'English' : 'Tiếng Việt'}
+                </button>
+            </div>
+
             {/* Brand Header */}
             <div className={`flex flex-col items-center transition-all duration-700 ${step !== 'splash' ? '-translate-y-6' : 'translate-y-0'}`}
                 style={{ transitionTimingFunction: 'var(--ease-spring)' }}>
@@ -186,7 +273,7 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                 </h1>
                 <p className="text-sm mt-2 font-light tracking-wider uppercase animate-fadeIn delay-2"
                     style={{ color: 'var(--zen-stone, #78716c)', letterSpacing: '0.15em' }}>
-                    Đồng hành tỉnh thức
+                    {copy.subtitle}
                 </p>
             </div>
 
@@ -204,7 +291,7 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                     </div>
                     <p className="text-center mt-4 text-[10px] uppercase tracking-[0.2em] animate-breathe"
                         style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
-                        Đang chuẩn bị không gian tĩnh lặng...
+                        {copy.preparing}
                     </p>
                 </div>
             )}
@@ -220,47 +307,47 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                                 <button onClick={() => setAuthMode('login')} className="w-full py-3.5 rounded-[16px] font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.97]"
                                     disabled={!canUseFirebaseAuth}
                                     style={{ background: 'linear-gradient(135deg, #ea580c 0%, #f97316 100%)', boxShadow: '0 8px 32px rgba(249,115,22,0.25)' }}>
-                                    <LogIn size={18} /> Đăng nhập bằng Email
+                                    <LogIn size={18} /> {copy.loginEmail}
                                 </button>
                                 <button onClick={() => setAuthMode('signup')} className="w-full py-3.5 rounded-[16px] font-semibold flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.97]"
                                     disabled={!canUseFirebaseAuth}
                                     style={{ background: 'rgba(249,115,22,0.08)', color: '#ea580c' }}>
-                                    <UserIcon size={18} /> Đăng ký thành viên mới
+                                    <UserIcon size={18} /> {copy.signup}
                                 </button>
                                 <div className="relative my-2">
                                     <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-                                    <div className="relative flex justify-center text-xs"><span className="bg-[#fcfaf8] px-2 text-gray-400">hoặc</span></div>
+                                    <div className="relative flex justify-center text-xs"><span className="bg-[#fcfaf8] px-2 text-gray-400">{copy.or}</span></div>
                                 </div>
                                 <button onClick={handleGoogleAuth} disabled={isAuthenticating || !canUseFirebaseAuth} className="w-full py-3.5 rounded-[16px] font-semibold text-gray-700 flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.97] border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-70 disabled:cursor-not-allowed">
                                     <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)"><path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" /><path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" /><path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" /><path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" /></g></svg>
-                                    Đăng nhập với Google
+                                    {copy.loginGoogle}
                                 </button>
                                 {!canUseFirebaseAuth && (
                                     <div className="text-[11px] px-1 text-amber-600">
-                                        Đăng nhập tạm thời chưa cấu hình, bạn vẫn có thể dùng chế độ Guest.
+                                        {copy.authUnavailable}
                                     </div>
                                 )}
                                 <button onClick={handleGuest} className="w-full py-3.5 rounded-[16px] font-medium text-sm flex items-center justify-center gap-2 transition-all duration-300 hover:bg-gray-100 active:scale-[0.97]"
                                     style={{ color: 'var(--zen-stone)' }}>
-                                    <Heart size={16} /> Trải nghiệm ẩn danh (Guest)
+                                    <Heart size={16} /> {copy.guest}
                                 </button>
                             </div>
                         ) : (
                             <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4 animate-fadeIn">
                                 {authMode === 'signup' && (
                                     <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">Tên gọi</label>
-                                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Tên của bạn" required
+                                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">{copy.nameLabel}</label>
+                                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={copy.namePlaceholder} required
                                             className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all" />
                                     </div>
                                 )}
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">Email</label>
-                                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email của bạn" required
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">{copy.emailLabel}</label>
+                                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={copy.emailPlaceholder} required
                                         className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all" />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">Mật khẩu</label>
+                                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest pl-1">{copy.passwordLabel}</label>
                                     <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required
                                         className="w-full bg-white/50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400 transition-all" />
                                 </div>
@@ -271,10 +358,10 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                                 )}
                                 <button type="submit" disabled={isAuthenticating} className="w-full mt-2 py-3.5 rounded-[16px] font-semibold text-white flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.97] disabled:opacity-70 disabled:cursor-wait"
                                     style={{ background: 'linear-gradient(135deg, #1c1917 0%, #292524 100%)', boxShadow: '0 8px 24px rgba(28,25,23,0.25)' }}>
-                                    {isAuthenticating ? 'Đang xử lý...' : (authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản')} {!isAuthenticating && <ArrowRight size={16} />}
+                                    {isAuthenticating ? copy.processing : (authMode === 'login' ? copy.login : copy.createAccount)} {!isAuthenticating && <ArrowRight size={16} />}
                                 </button>
                                 <button type="button" onClick={() => setAuthMode(null)} className="text-xs text-gray-400 hover:text-gray-600 mt-2">
-                                    Quay lại
+                                    {copy.back}
                                 </button>
                             </form>
                         )}
@@ -290,7 +377,7 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-6" style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
                                 <Shield size={12} />
-                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">Thiết lập kết nối</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em]">{copy.setup}</span>
                             </div>
 
                             <div className="space-y-3">
@@ -309,8 +396,8 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                                             <Mic size={18} />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-sm" style={{ color: useMic ? 'var(--zen-ink)' : 'var(--zen-stone)' }}>Giọng nói</h3>
-                                            <p className="text-[10px]" style={{ color: 'var(--zen-stone-light)' }}>Để trò chuyện</p>
+                                            <h3 className="font-semibold text-sm" style={{ color: useMic ? 'var(--zen-ink)' : 'var(--zen-stone)' }}>{copy.voice}</h3>
+                                            <p className="text-[10px]" style={{ color: 'var(--zen-stone-light)' }}>{copy.voiceDesc}</p>
                                         </div>
                                     </div>
                                     <div className="w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300"
@@ -334,8 +421,8 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                                             <Camera size={18} />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-sm" style={{ color: useCam ? 'var(--zen-ink)' : 'var(--zen-stone)' }}>Thị giác</h3>
-                                            <p className="text-[10px]" style={{ color: 'var(--zen-stone-light)' }}>Đo nhịp thở & Căng thẳng</p>
+                                            <h3 className="font-semibold text-sm" style={{ color: useCam ? 'var(--zen-ink)' : 'var(--zen-stone)' }}>{copy.vision}</h3>
+                                            <p className="text-[10px]" style={{ color: 'var(--zen-stone-light)' }}>{copy.visionDesc}</p>
                                         </div>
                                     </div>
                                     <div className="w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300"
@@ -354,14 +441,18 @@ export const OnboardingFlow: React.FC<Props> = ({ onComplete }) => {
                                     boxShadow: '0 8px 24px rgba(28,25,23,0.25)',
                                 }}
                             >
-                                <span className="tracking-wide">{isProcessing ? 'Đang khởi tạo...' : 'Bắt đầu hành trình'}</span>
+                                <span className="tracking-wide">{isProcessing ? copy.booting : copy.startJourney}</span>
                                 {!isProcessing && <ArrowRight size={16} />}
                             </button>
                         </div>
                     </div>
                     <p className="text-center text-[10px] mt-6 max-w-[220px] mx-auto leading-relaxed"
                         style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
-                        Mic/Camera xử lý trên thiết bị; xác thực và token phiên đi qua kết nối mã hóa.
+                        {copy.privacy}
+                    </p>
+                    <p className="text-center text-[10px] mt-2 max-w-[240px] mx-auto leading-relaxed"
+                        style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
+                        {copy.safety}
                     </p>
                 </div>
             )}

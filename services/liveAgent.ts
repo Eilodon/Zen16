@@ -8,6 +8,7 @@ import {
 } from "./audioManager";
 import { getSharedAudioContext } from "./audioContext";
 import { buildWsUrlWithToken, getWebSocketAccessToken } from "./wsAuth";
+import { telemetry } from "./telemetry";
 
 // ─── Configuration ───────────────────────────────────────────
 // Cloud Run URL — update after deployment
@@ -111,6 +112,9 @@ export class ZenLiveSession {
     private faceLandmarker: FaceLandmarker | null = null;
     private blinkHistory: number[] = [];
     private lastContextSend = 0;
+    private lastVisionFrameSend = 0;
+    private pendingInterruptionAt: number | null = null;
+    private readonly VISION_FRAME_INTERVAL_MS = 3000;
 
     // Idle timer
     private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -146,6 +150,8 @@ export class ZenLiveSession {
             this.isManuallyClosed = false;
             this.reconnectAttempts = 0;
         }
+        telemetry.markSessionStart();
+        this.pendingInterruptionAt = null;
         this.teardownConnectionState(true);
         this.resetIdleTimer();
 
@@ -224,6 +230,9 @@ export class ZenLiveSession {
 
             this.ws.onopen = () => {
                 console.log("[Zen16] WebSocket connected to backend");
+                if (this.reconnectAttempts > 0) {
+                    telemetry.markReconnectSuccess();
+                }
                 this.reconnectAttempts = 0;
                 this.onDisconnectCallback(undefined, false);
             };
@@ -232,6 +241,12 @@ export class ZenLiveSession {
                 this.resetIdleTimer();
                 if (event.data instanceof ArrayBuffer) {
                     // Incoming binary audio from Gemini
+                    telemetry.markFirstAudioChunk();
+                    if (this.pendingInterruptionAt) {
+                        const recoveryMs = Math.max(0, Date.now() - this.pendingInterruptionAt);
+                        telemetry.markInterruptionRecovery(recoveryMs);
+                        this.pendingInterruptionAt = null;
+                    }
                     this.isAiSpeaking = true;
                     this.onAudioActivity(true);
                     const audioData = this.decodeInt16ToFloat32(event.data);
@@ -250,6 +265,8 @@ export class ZenLiveSession {
 
                         case "interrupted":
                             // Barge-in: user interrupted AI
+                            this.pendingInterruptionAt = Date.now();
+                            telemetry.markInterruption();
                             this.interruptPlayback();
                             this.isAiSpeaking = false;
                             this.onAudioActivity(false);
@@ -341,10 +358,10 @@ export class ZenLiveSession {
         this.videoElement.play();
 
         this.cameraInterval = setInterval(() => {
-            if (!this.videoElement || !this.faceLandmarker) return;
+            if (!this.videoElement) return;
 
             // 1. Process local vision tracking
-            if (this.videoElement.videoWidth > 0) {
+            if (this.videoElement.videoWidth > 0 && this.faceLandmarker) {
                 const results = this.faceLandmarker.detectForVideo(this.videoElement, performance.now());
                 if (results.faceBlendshapes && results.faceBlendshapes.length > 0) {
                     const shapes = results.faceBlendshapes[0].categories;
@@ -382,6 +399,48 @@ export class ZenLiveSession {
                             }
                         }
                     }
+                }
+            }
+
+            // 2. Send compact JPEG frame to Gemini Live for real visual grounding
+            if (
+                this.ws?.readyState === WebSocket.OPEN &&
+                this.videoElement.videoWidth > 0 &&
+                Date.now() - this.lastVisionFrameSend >= this.VISION_FRAME_INTERVAL_MS
+            ) {
+                if (!this.canvas) {
+                    this.canvas = document.createElement("canvas");
+                }
+                const width = 320;
+                const aspect = this.videoElement.videoHeight / this.videoElement.videoWidth;
+                const height = Math.max(180, Math.round(width * aspect));
+                this.canvas.width = width;
+                this.canvas.height = height;
+                const ctx = this.canvas.getContext("2d");
+                if (!ctx) {
+                    telemetry.markVisionFrame(false);
+                    return;
+                }
+
+                try {
+                    ctx.drawImage(this.videoElement, 0, 0, width, height);
+                    const dataUrl = this.canvas.toDataURL("image/jpeg", 0.6);
+                    const base64Data = dataUrl.split(",")[1];
+                    if (!base64Data) {
+                        telemetry.markVisionFrame(false);
+                        return;
+                    }
+                    this.ws.send(
+                        JSON.stringify({
+                            type: "image",
+                            data: base64Data,
+                        })
+                    );
+                    this.lastVisionFrameSend = Date.now();
+                    telemetry.markVisionFrame(true);
+                } catch (error) {
+                    console.warn("[Zen16 Vision] Failed to send image frame", error);
+                    telemetry.markVisionFrame(false);
                 }
             }
         }, 1000); // 1 FPS analysis is enough for background context
@@ -427,6 +486,7 @@ export class ZenLiveSession {
         this.teardownConnectionState(false);
 
         if (this.reconnectAttempts < this.MAX_RETRIES) {
+            telemetry.markReconnectAttempt();
             this.reconnectAttempts++;
             const delay =
                 1000 * Math.pow(2, this.reconnectAttempts - 1) +
@@ -533,6 +593,8 @@ export class ZenLiveSession {
 
     private teardownConnectionState(closeSocket: boolean) {
         this.clearReconnectTimer();
+        this.pendingInterruptionAt = null;
+        this.lastVisionFrameSend = 0;
         window.removeEventListener(
             "online",
             this.boundHandleNetworkRecovery

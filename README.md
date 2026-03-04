@@ -31,6 +31,7 @@
 - 🫁 **Guided Breathing** — AI triggers 4-7-8, box breathing exercises when stress detected
 - 🚨 **Emergency Protocol** — Pub/Sub alerts family members when severe distress detected
 - 💾 **Session Memory** — Firestore persistent memory for long-term relationship
+- 📈 **Realtime Telemetry** — Tracks TTFB, reconnect reliability, auth failures, and vision frame delivery
 
 ---
 
@@ -207,6 +208,7 @@ Zen16/
 - **Category**: Live Agents
 - **Mandatory Tech**: ✅ Gemini Live API, ✅ google-genai SDK, ✅ Google Cloud (Cloud Run)
 - **Content**: #GeminiLiveAgentChallenge
+- **Playbook**: See `docs/COMPETITION_PLAYBOOK.md` for demo script, evidence checklist, and final submission QA.
 
 ---
 

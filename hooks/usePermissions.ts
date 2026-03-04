@@ -10,6 +10,7 @@ export function usePermissions() {
   } = useZenStore();
   
   const { setSnackbar, setInputMode } = useUIStore();
+  const language = useUIStore((state) => state.language);
 
   /**
    * Helper to request audio with fallback
@@ -103,13 +104,17 @@ export function usePermissions() {
       if (useMic) setMicStatus('denied');
       if (useCamera) setCameraStatus('denied');
       
-      let msg = "Không thể truy cập thiết bị.";
+      let msg = language === 'vi' ? "Không thể truy cập thiết bị." : "Unable to access device.";
       if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-         msg = "Bạn đã từ chối cấp quyền. Ứng dụng sẽ chuyển sang chế độ Chat.";
+         msg = language === 'vi'
+           ? "Bạn đã từ chối cấp quyền. Ứng dụng sẽ chuyển sang chế độ Chat."
+           : "Permission denied. Switching to chat mode.";
       } else if (e.name === 'NotFoundError') {
-         msg = "Không tìm thấy thiết bị.";
+         msg = language === 'vi' ? "Không tìm thấy thiết bị." : "Device not found.";
       } else if (e.name === 'OverconstrainedError') {
-         msg = "Thiết bị không hỗ trợ định dạng này.";
+         msg = language === 'vi'
+           ? "Thiết bị không hỗ trợ định dạng này."
+           : "This device does not support requested constraints.";
       }
 
       setSnackbar({ text: msg, kind: "warn" });
@@ -118,7 +123,7 @@ export function usePermissions() {
         setInputMode('text');
       }
     }
-  }, [setMicStatus, setCameraStatus, setSnackbar, setInputMode]);
+  }, [setMicStatus, setCameraStatus, setSnackbar, setInputMode, language]);
 
   /**
    * Lazy Camera Request

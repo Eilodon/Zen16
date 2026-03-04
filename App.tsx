@@ -67,7 +67,7 @@ export default function App() {
   })));
 
   // --- Permissions Hook ---
-  const { requestMediaAccess, micStatus } = usePermissions();
+  const { requestMediaAccess, micStatus, cameraStatus } = usePermissions();
 
   // --- Local UI State ---
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
@@ -198,12 +198,30 @@ export default function App() {
     setIsLoading(false);
   };
 
+  const uiText = language === 'vi'
+    ? {
+      micDenied: 'Bạn đã từ chối quyền Micro. Vui lòng cấp lại trong cài đặt.',
+      mode: 'Chế độ',
+      offline: 'Bạn đang ở chế độ Offline (Nội quán).',
+      newSession: 'Bắt đầu phiên mới',
+      language: 'Ngôn ngữ',
+      cannotProcess: 'Không thể xử lý yêu cầu',
+    }
+    : {
+      micDenied: 'Microphone permission was denied. Please enable it in settings.',
+      mode: 'Mode',
+      offline: 'You are currently in Offline mode.',
+      newSession: 'Started a new session',
+      language: 'Language',
+      cannotProcess: 'Unable to process request',
+    };
+
   const toggleConnection = () => {
     if (status === 'idle') {
       if (micStatus === 'granted') {
         connect();
       } else if (micStatus === 'denied') {
-        setSnackbar({ text: "Bạn đã từ chối quyền Micro. Vui lòng cấp lại trong cài đặt.", kind: "error" });
+        setSnackbar({ text: uiText.micDenied, kind: "error" });
       } else {
         requestMediaAccess(true, false).then(() => connect());
       }
@@ -230,7 +248,7 @@ export default function App() {
 
   const handleModeChange = (mode: any, items: string[]) => {
     setCulturalMode(mode);
-    setSnackbar({ text: `Chế độ: ${mode}`, kind: "success" });
+    setSnackbar({ text: `${uiText.mode}: ${mode}`, kind: "success" });
     haptic('success');
     if (status !== 'idle') {
       disconnect();
@@ -243,7 +261,7 @@ export default function App() {
 
     // Improved offline handler with clear status notification
     if (!navigator.onLine) {
-      setSnackbar({ text: "Thế giới đang tĩnh lặng. Bạn đang ở chế độ Offline (Nội quán).", kind: "info" });
+      setSnackbar({ text: uiText.offline, kind: "info" });
     }
 
     const response = await sendText(text);
@@ -264,7 +282,7 @@ export default function App() {
   const handleResetSession = () => {
     haptic('warn');
     setZenData(null);
-    setSnackbar({ text: "Bắt đầu phiên mới", kind: 'info' });
+    setSnackbar({ text: uiText.newSession, kind: 'info' });
   };
 
   return (
@@ -395,8 +413,9 @@ export default function App() {
           <LiveStatusBar
             status={status}
             connectionState={connectionState}
-            hasCamera={true}
+            hasCamera={cameraStatus === 'granted'}
             emotion={zenData?.emotion}
+            language={language}
           />
         </div>
       </div>
@@ -634,7 +653,7 @@ export default function App() {
           culturalMode={culturalMode}
           onLanguageChange={(lang) => {
             setLanguage(lang);
-            setSnackbar({ text: lang === 'vi' ? 'Tiếng Việt' : 'English', kind: 'success' });
+            setSnackbar({ text: `${uiText.language}: ${lang === 'vi' ? 'Tiếng Việt' : 'English'}`, kind: 'success' });
             if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
           }}
           onInputModeChange={(mode) => {
@@ -643,7 +662,7 @@ export default function App() {
           }}
           onCulturalModeChange={(mode) => {
             setCulturalMode(mode);
-            setSnackbar({ text: `Chế độ: ${mode}`, kind: 'success' });
+            setSnackbar({ text: `${uiText.mode}: ${mode}`, kind: 'success' });
             if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
           }}
           onStartBreathing={(type) => {

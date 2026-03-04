@@ -60,6 +60,25 @@ export interface VisionAnalysis {
   mode: CulturalMode;
 }
 
+export interface RealtimeMetrics {
+  sessionsStarted: number;
+  currentSessionStartedAt: number | null;
+  lastTtfbMs: number | null;
+  avgTtfbMs: number | null;
+  ttfbSamples: number;
+  interruptions: number;
+  lastInterruptionAt: number | null;
+  lastInterruptionRecoveryMs: number | null;
+  avgInterruptionRecoveryMs: number | null;
+  interruptionRecoverySamples: number;
+  reconnectAttempts: number;
+  reconnectSuccesses: number;
+  authRequests: number;
+  authFailures: number;
+  visionFramesSent: number;
+  visionFramesDropped: number;
+}
+
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;

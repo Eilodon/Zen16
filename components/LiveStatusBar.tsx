@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { WifiOff, Radio, Volume2, Mic, Eye } from 'lucide-react';
-import { AppState, ConnectionState } from '../types';
+import { AppState, ConnectionState, Language } from '../types';
 
 interface Props {
     status: AppState;
     connectionState: ConnectionState;
     hasCamera: boolean;
     emotion?: string;
+    language?: Language;
 }
 
 const EMOTION_EMOJI: Record<string, string> = {
@@ -19,6 +20,7 @@ export const LiveStatusBar: React.FC<Props> = ({
     connectionState,
     hasCamera,
     emotion,
+    language = 'vi',
 }) => {
     const [elapsed, setElapsed] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
@@ -35,7 +37,7 @@ export const LiveStatusBar: React.FC<Props> = ({
             setElapsed(Math.floor((Date.now() - start) / 1000));
         }, 1000);
         return () => clearInterval(interval);
-    }, [status === 'idle']);
+    }, [status]);
 
     const formatTime = (s: number) => {
         const m = Math.floor(s / 60);
@@ -71,6 +73,22 @@ export const LiveStatusBar: React.FC<Props> = ({
 
     const barStyle = getBarStyle();
 
+    const labels = language === 'vi'
+        ? {
+            reconnecting: 'Đang kết nối lại',
+            speaking: 'Đang phản hồi',
+            listening: 'Đang nghe',
+            thinking: 'Đang suy ngẫm',
+            live: 'Live',
+        }
+        : {
+            reconnecting: 'Reconnecting',
+            speaking: 'Responding',
+            listening: 'Listening',
+            thinking: 'Thinking',
+            live: 'Live',
+        };
+
     return (
         <div
             className="flex items-center gap-2.5 px-3.5 py-2 rounded-full backdrop-blur-xl transition-all duration-500 animate-fadeInDown"
@@ -105,17 +123,17 @@ export const LiveStatusBar: React.FC<Props> = ({
             {status === 'processing' && <Radio size={10} className="text-stone-500 animate-spin-slow" />}
 
             {/* Status text */}
-            <span className="text-[9px] font-semibold uppercase tracking-[0.14em]"
-                style={{ color: 'var(--zen-stone-dark, #57534e)' }}>
+                <span className="text-[9px] font-semibold uppercase tracking-[0.14em]"
+                    style={{ color: 'var(--zen-stone-dark, #57534e)' }}>
                 {isReconnecting
-                    ? 'Đang kết nối lại'
+                    ? labels.reconnecting
                     : isSpeaking
-                        ? 'Đang phản hồi'
+                        ? labels.speaking
                         : isListening
-                            ? 'Đang nghe'
+                            ? labels.listening
                             : status === 'processing'
-                                ? 'Đang suy ngẫm'
-                                : 'Live'}
+                                ? labels.thinking
+                                : labels.live}
             </span>
 
             {/* Divider */}
