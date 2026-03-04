@@ -11,67 +11,78 @@ interface SnackbarProps {
 
 export const Snackbar: React.FC<SnackbarProps> = ({ kind = "success", text, onClose }) => {
   const [closing, setClosing] = useState(false);
-  
-  // Custom easings from Linh Quang Design Kit
-  const easingIn = kind === "success" 
-    ? "cubic-bezier(0.22, 1, 0.36, 1)" 
-    : "cubic-bezier(0.4, 0, 0.2, 1)";
-  const easingOut = "cubic-bezier(0.4, 0, 1, 1)";
-  
+
   useEffect(() => {
     const SHOW_TIME = 4000;
-    // Start exit animation before unmounting
     const t1 = setTimeout(() => setClosing(true), Math.max(0, SHOW_TIME - 300));
-    // Unmount
     const t2 = setTimeout(() => onClose?.(), SHOW_TIME);
-    
+
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onClose]);
 
-  const colors = {
-    success: "border-emerald-500 text-emerald-900 bg-emerald-50/90",
-    warn: "border-amber-500 text-amber-900 bg-amber-50/90",
-    error: "border-red-500 text-red-900 bg-red-50/90",
-    info: "border-stone-400 text-stone-900 bg-white/90"
+  const configs: Record<string, { bg: string; border: string; text: string; iconBg: string; iconColor: string }> = {
+    success: {
+      bg: 'rgba(240,253,244,0.92)', border: 'rgba(16,185,129,0.2)',
+      text: '#065f46', iconBg: 'rgba(16,185,129,0.1)', iconColor: '#10b981'
+    },
+    warn: {
+      bg: 'rgba(255,251,235,0.92)', border: 'rgba(245,158,11,0.2)',
+      text: '#78350f', iconBg: 'rgba(245,158,11,0.1)', iconColor: '#f59e0b'
+    },
+    error: {
+      bg: 'rgba(254,242,242,0.92)', border: 'rgba(239,68,68,0.2)',
+      text: '#7f1d1d', iconBg: 'rgba(239,68,68,0.1)', iconColor: '#ef4444'
+    },
+    info: {
+      bg: 'rgba(255,255,255,0.92)', border: 'rgba(120,113,108,0.12)',
+      text: '#1c1917', iconBg: 'rgba(120,113,108,0.06)', iconColor: '#78716c'
+    },
   };
 
-  const icons = {
-    success: <Check size={18} className="text-emerald-600" />,
-    warn: <AlertCircle size={18} className="text-amber-600" />,
-    error: <AlertCircle size={18} className="text-red-600" />,
-    info: <Info size={18} className="text-stone-600" />
+  const c = configs[kind] || configs.info;
+
+  const icons: Record<string, React.ReactNode> = {
+    success: <Check size={14} strokeWidth={2.5} />,
+    warn: <AlertCircle size={14} strokeWidth={2} />,
+    error: <AlertCircle size={14} strokeWidth={2} />,
+    info: <Info size={14} strokeWidth={2} />,
   };
 
   return (
     <>
       <style>{`
         @keyframes snackIn {
-          from { opacity: 0; transform: translate(-50%, 20px) scale(0.95); }
+          from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
           to { opacity: 1; transform: translate(-50%, 0) scale(1); }
         }
         @keyframes snackOut {
           from { opacity: 1; transform: translate(-50%, 0) scale(1); }
-          to { opacity: 0; transform: translate(-50%, 10px) scale(0.95); }
+          to { opacity: 0; transform: translate(-50%, 8px) scale(0.96); }
         }
       `}</style>
-      <div 
-        role="status" 
+      <div
+        role="status"
         aria-live="polite"
-        className={`fixed left-1/2 bottom-24 z-[100] min-w-[300px] max-w-[90vw]
-          rounded-[16px] px-4 py-3 border shadow-xl flex items-center justify-between gap-3 backdrop-blur-md
-          ${colors[kind]}
-        `}
+        className="fixed left-1/2 bottom-24 z-[100] min-w-[280px] max-w-[90vw] rounded-[14px] px-4 py-3 flex items-center justify-between gap-3"
         style={{
           transform: 'translateX(-50%)',
-          animation: `${closing ? 'snackOut' : 'snackIn'} ${closing ? 200 : 350}ms ${closing ? easingOut : easingIn} forwards`
+          background: c.bg,
+          backdropFilter: 'blur(20px) saturate(1.3)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+          border: `1px solid ${c.border}`,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+          color: c.text,
+          animation: `${closing ? 'snackOut' : 'snackIn'} ${closing ? 200 : 400}ms ${closing ? 'var(--ease-in-out)' : 'var(--ease-spring)'} forwards`,
         }}
       >
         <div className="flex items-center gap-3">
-          {icons[kind]}
-          <span className="text-[14px] font-medium font-sans">{text}</span>
+          <div className="p-1.5 rounded-full" style={{ background: c.iconBg, color: c.iconColor }}>
+            {icons[kind]}
+          </div>
+          <span className="text-[13px] font-medium" style={{ fontFamily: 'var(--font-body)' }}>{text}</span>
         </div>
-        <button onClick={() => setClosing(true)} className="opacity-50 hover:opacity-100 p-1">
-          <X size={14} />
+        <button onClick={() => setClosing(true)} className="p-1 rounded-full transition-opacity" style={{ opacity: 0.35 }}>
+          <X size={13} />
         </button>
       </div>
     </>

@@ -11,35 +11,31 @@ interface Props {
 export const HistoryPanel: React.FC<Props> = ({ history, onClear }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Memoize the heavy analysis logic so it doesn't run on every render
   const analysis = useMemo(() => {
     if (history.length === 0) return null;
 
-    // Use history prop directly
     const displayData = history;
 
-    // Helper for safe access
     const safeMetric = (entry: ConversationEntry, key: 'coherence' | 'presence' | 'entanglement') => {
-        return entry.quantum_metrics ? entry.quantum_metrics[key] : 0;
+      return entry.quantum_metrics ? entry.quantum_metrics[key] : 0;
     };
 
     const avgCoherence = displayData.reduce((sum, e) => sum + safeMetric(e, 'coherence'), 0) / (displayData.length || 1);
     const avgPresence = displayData.reduce((sum, e) => sum + safeMetric(e, 'presence'), 0) / (displayData.length || 1);
     const avgEntanglement = displayData.reduce((sum, e) => sum + safeMetric(e, 'entanglement'), 0) / (displayData.length || 1);
-    
-    // DETERMINE CONSCIOUSNESS DNA ARCHETYPE
+
     let archetype: ConsciousnessArchetype = 'The Seeker';
     let description = "Bạn đang trên hành trình tìm kiếm sự bình an.";
 
     if (avgPresence > 0.7 && avgCoherence > 0.7) {
-        archetype = 'The Warrior'; // High discipline
-        description = "Bạn có khả năng định tâm vững chãi như núi.";
+      archetype = 'The Warrior';
+      description = "Bạn có khả năng định tâm vững chãi như núi.";
     } else if (avgEntanglement > 0.7) {
-        archetype = 'The Healer'; // High connection
-        description = "Trái tim bạn rộng mở và kết nối sâu sắc với vạn vật.";
+      archetype = 'The Healer';
+      description = "Trái tim bạn rộng mở và kết nối sâu sắc với vạn vật.";
     } else if (avgCoherence > 0.8) {
-        archetype = 'The Observer'; // High coherence
-        description = "Bạn nhìn thấu bản chất vấn đề với sự tĩnh lặng.";
+      archetype = 'The Observer';
+      description = "Bạn nhìn thấu bản chất vấn đề với sự tĩnh lặng.";
     }
 
     return {
@@ -56,18 +52,16 @@ export const HistoryPanel: React.FC<Props> = ({ history, onClear }) => {
 
   const { displayData, avgCoherence, avgPresence, avgEntanglement, archetype, description } = analysis;
 
-  const emotionColor = {
-    anxious: 'border-orange-400 bg-orange-50',
-    sad: 'border-blue-400 bg-blue-50',
-    joyful: 'border-yellow-400 bg-yellow-50',
-    calm: 'border-emerald-400 bg-emerald-50',
-    neutral: 'border-stone-300 bg-stone-50'
+  const emotionAccent: Record<string, string> = {
+    anxious: '#f59e0b', sad: '#3b82f6', joyful: '#f97316',
+    calm: '#10b981', neutral: '#78716c', stressed: '#ef4444',
+    confused: '#06b6d4', lonely: '#6366f1', seeking: '#8b5cf6',
   };
 
   const handleClear = async () => {
     if (window.confirm('Xóa toàn bộ lịch sử? (Không thể hoàn tác)')) {
       await dbService.clearAll();
-      onClear(); 
+      onClear();
       setIsOpen(false);
     }
   };
@@ -76,64 +70,99 @@ export const HistoryPanel: React.FC<Props> = ({ history, onClear }) => {
     <>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2.5 rounded-full bg-white/40 backdrop-blur-md text-stone-600 hover:bg-white/80 transition-colors shadow-sm border border-white/40"
+        className="p-2.5 rounded-full transition-all duration-300 hover:scale-105 active:scale-95"
+        style={{
+          background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+          color: 'var(--zen-stone-dark, #57534e)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        }}
         aria-label="View history"
       >
-        {isOpen ? <Map size={18} /> : <History size={18} />}
+        {isOpen ? <Map size={17} strokeWidth={1.5} /> : <History size={17} strokeWidth={1.5} />}
       </button>
 
       {isOpen && (
-        <div className="absolute top-20 right-4 z-50 w-80 max-h-[70vh] flex flex-col bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-100 animate-[fadeIn_0.3s_ease-out]">
+        <div className="absolute top-20 right-4 z-50 w-80 max-h-[70vh] flex flex-col rounded-[22px] overflow-hidden animate-scaleIn"
+          style={{
+            background: 'rgba(255,255,255,0.92)',
+            backdropFilter: 'blur(32px) saturate(1.5)',
+            WebkitBackdropFilter: 'blur(32px) saturate(1.5)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06)',
+            border: '1px solid rgba(255,255,255,0.6)',
+          }}>
           {/* Header */}
-          <div className="bg-gradient-to-r from-stone-800 to-stone-900 text-amber-50 p-4 rounded-t-2xl flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-2">
-              <Fingerprint size={18} className="text-amber-400" />
-              <h3 className="font-bold text-sm tracking-wide uppercase">Consciousness DNA</h3>
+          <div className="p-4 flex items-center justify-between"
+            style={{
+              background: 'linear-gradient(135deg, #1c1917, #292524)',
+              borderRadius: '22px 22px 0 0',
+            }}>
+            <div className="flex items-center gap-2.5">
+              <Fingerprint size={16} style={{ color: '#f97316' }} strokeWidth={1.5} />
+              <h3 className="font-semibold text-[11px] tracking-[0.14em] uppercase text-stone-200">Consciousness DNA</h3>
             </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 rounded-full p-1 transition-colors">
-              <X size={18} />
+            <button onClick={() => setIsOpen(false)}
+              className="p-1 rounded-full transition-colors hover:bg-white/10" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <X size={16} />
             </button>
           </div>
 
-          {/* DNA Profile (New Feature) */}
-          <div className="bg-stone-50 p-5 border-b border-stone-200">
-             <div className="text-center mb-3">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400">Your Archetype</span>
-                <h4 className="text-xl font-serif font-bold text-stone-800 mt-1">{archetype}</h4>
-                <p className="text-xs text-stone-500 italic mt-1">{description}</p>
-             </div>
-             
-             {/* Mini DNA Bar Chart */}
-             <div className="space-y-2 mt-4">
-                <DnaBar label="Presence" value={avgPresence} color="bg-emerald-500" />
-                <DnaBar label="Connection" value={avgEntanglement} color="bg-purple-500" />
-                <DnaBar label="Clarity" value={avgCoherence} color="bg-blue-500" />
-             </div>
+          {/* DNA Profile */}
+          <div className="p-5" style={{ borderBottom: '1px solid rgba(120,113,108,0.06)' }}>
+            <div className="text-center mb-4">
+              <span className="text-[9px] uppercase tracking-[0.2em]" style={{ color: 'var(--zen-stone-light)' }}>Your Archetype</span>
+              <h4 className="text-xl font-medium mt-1.5" style={{ fontFamily: 'var(--font-wisdom)', color: 'var(--zen-ink)' }}>
+                {archetype}
+              </h4>
+              <p className="text-[11px] italic mt-1" style={{ fontFamily: 'var(--font-wisdom)', color: 'var(--zen-stone)' }}>
+                {description}
+              </p>
+            </div>
+
+            <div className="space-y-2 mt-4">
+              <DnaBar label="Presence" value={avgPresence} color="#10b981" />
+              <DnaBar label="Connection" value={avgEntanglement} color="#8b5cf6" />
+              <DnaBar label="Clarity" value={avgCoherence} color="#3b82f6" />
+            </div>
           </div>
 
           {/* History list */}
-          <div className="overflow-y-auto p-4 space-y-3 flex-1 custom-scrollbar">
-            <div className="flex items-center gap-2 mb-2 text-stone-400">
-               <TrendingUp size={12} />
-               <span className="text-[10px] uppercase font-bold tracking-wider">Journey Log</span>
+          <div className="overflow-y-auto p-4 space-y-2 flex-1 custom-scrollbar">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={11} style={{ color: 'var(--zen-stone-light)' }} strokeWidth={1.5} />
+              <span className="text-[9px] uppercase font-semibold tracking-[0.14em]" style={{ color: 'var(--zen-stone-light)' }}>
+                Journey Log
+              </span>
             </div>
-            
+
             {[...displayData].reverse().map((entry) => {
               const date = new Date(entry.timestamp);
               const isToday = date.toDateString() === new Date().toDateString();
-              const timeStr = isToday 
-                ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) 
+              const timeStr = isToday
+                ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
                 : date.toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' });
-              
+
+              const accent = emotionAccent[entry.emotion] || '#78716c';
+
               return (
-                <div key={entry.id} className={`border-l-[3px] ${emotionColor[entry.emotion] || emotionColor.neutral} rounded-r-lg p-3 transition-all hover:bg-stone-50`}>
+                <div key={entry.id}
+                  className="rounded-[12px] p-3 transition-all duration-300 hover:scale-[1.01]"
+                  style={{
+                    borderLeft: `3px solid ${accent}`,
+                    background: `${accent}05`,
+                  }}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">{entry.emotion}</span>
-                    <span className="text-[10px] text-stone-400 font-mono">{timeStr}</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: accent }}>
+                      {entry.emotion}
+                    </span>
+                    <span className="text-[9px] font-mono tabular-nums" style={{ color: 'var(--zen-stone-light)' }}>
+                      {timeStr}
+                    </span>
                   </div>
-                  <div className="flex gap-3 text-[10px] font-medium opacity-80">
-                    <span className="text-blue-600">C: {Math.round((entry.quantum_metrics?.coherence || 0) * 100)}</span>
-                    <span className="text-purple-600">E: {Math.round((entry.quantum_metrics?.entanglement || 0) * 100)}</span>
+                  <div className="flex gap-3 text-[9px] font-medium" style={{ opacity: 0.6 }}>
+                    <span style={{ color: '#3b82f6' }}>C: {Math.round((entry.quantum_metrics?.coherence || 0) * 100)}</span>
+                    <span style={{ color: '#8b5cf6' }}>E: {Math.round((entry.quantum_metrics?.entanglement || 0) * 100)}</span>
                   </div>
                 </div>
               );
@@ -141,12 +170,15 @@ export const HistoryPanel: React.FC<Props> = ({ history, onClear }) => {
           </div>
 
           {/* Clear button */}
-          <div className="border-t border-stone-100 p-3 bg-stone-50/50 rounded-b-2xl">
+          <div className="p-3" style={{ borderTop: '1px solid rgba(120,113,108,0.06)' }}>
             <button
               onClick={handleClear}
-              className="w-full py-2 text-xs font-medium text-stone-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2 text-[11px] font-medium rounded-[10px] transition-all duration-300 flex items-center justify-center gap-2"
+              style={{ color: 'var(--zen-stone-light)', background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.04)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--zen-stone-light)'; e.currentTarget.style.background = 'transparent'; }}
             >
-              <Trash2 size={14} /> Xóa lịch sử
+              <Trash2 size={13} /> Xóa lịch sử
             </button>
           </div>
         </div>
@@ -156,13 +188,19 @@ export const HistoryPanel: React.FC<Props> = ({ history, onClear }) => {
 };
 
 const DnaBar = ({ label, value, color }: { label: string, value: number, color: string }) => (
-    <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-stone-400 w-16 text-right">{label}</span>
-        <div className="flex-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
-            <div 
-                className={`h-full ${color} rounded-full`} 
-                style={{ width: `${value * 100}%` }}
-            />
-        </div>
+  <div className="flex items-center gap-2">
+    <span className="text-[9px] font-semibold w-16 text-right uppercase tracking-[0.1em]" style={{ color: 'var(--zen-stone-light)' }}>
+      {label}
+    </span>
+    <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: 'rgba(120,113,108,0.06)' }}>
+      <div
+        className="h-full rounded-full transition-all duration-700"
+        style={{
+          width: `${value * 100}%`,
+          background: `linear-gradient(90deg, ${color}90, ${color})`,
+          boxShadow: `0 0 6px ${color}25`,
+        }}
+      />
     </div>
+  </div>
 );

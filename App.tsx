@@ -7,6 +7,7 @@ import { Snackbar } from './components/Snackbar';
 import { CameraScan } from './components/CameraScan';
 import { ReasoningPanel } from './components/ReasoningPanel';
 import { BottomSheet } from './components/PandoraParts';
+import { SettingsSheet } from './components/SettingsSheet';
 const AudioEngine = React.lazy(() => import('./components/AudioEngine'));
 import { BreathingCircle } from './components/BreathingCircle';
 import { EmergencyProtocol } from './components/EmergencyProtocol';
@@ -18,8 +19,8 @@ import { MicroPractices } from './components/MicroPractices';
 import { ConversationEntry, ZenResponse } from './types';
 import { detectEmergency } from './data/emergencyKeywords';
 import { BUDDHIST_TEACHINGS } from './data/buddhistTeachings';
-import { Keyboard, Mic, Languages, SendHorizontal, Brain, Sparkles, Wifi, WifiOff, RotateCcw } from 'lucide-react';
-import { haptic, TOKENS } from './utils/designSystem';
+import { Keyboard, Mic, Languages, SendHorizontal, Brain, Sparkles, RotateCcw, Settings, Activity } from 'lucide-react';
+import { haptic } from './utils/designSystem';
 import { dbService } from './services/db';
 import { useZenSession } from './hooks/useZenSession';
 import { useUIStore, useZenStore } from './store/zenStore';
@@ -44,6 +45,9 @@ export default function App() {
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const [showPractices, setShowPractices] = useState(false);
   const [quoteIndex, setQuoteIndex] = useState(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isStressSheetOpen, setIsStressSheetOpen] = useState(false);
+  const [currentAmbient, setCurrentAmbient] = useState<string>('silence');
 
   // Audio Viz State
   const [frequencyData, setFrequencyData] = useState<Uint8Array>(new Uint8Array(64));
@@ -63,23 +67,6 @@ export default function App() {
     }
   });
 
-  const textContrastStyle = useMemo(() => {
-    const emotion = zenData?.emotion || 'neutral';
-    const brightOrbs = ['joyful', 'neutral', 'calm'];
-    const isBrightOrb = brightOrbs.includes(emotion);
-
-    if (isBrightOrb) {
-      return {
-        color: 'text-stone-800',
-        shadow: 'drop-shadow-[0_0_25px_rgba(255,255,255,0.9)]'
-      };
-    } else {
-      return {
-        color: 'text-white/95',
-        shadow: 'drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]'
-      };
-    }
-  }, [zenData?.emotion]);
 
   useEffect(() => {
     dbService.getAllEntries().then(entries => {
@@ -160,13 +147,11 @@ export default function App() {
 
   const toggleConnection = () => {
     if (status === 'idle') {
-      // Gated Check: Do we have permission?
       if (micStatus === 'granted') {
         connect();
       } else if (micStatus === 'denied') {
         setSnackbar({ text: "Bạn đã từ chối quyền Micro. Vui lòng cấp lại trong cài đặt.", kind: "error" });
       } else {
-        // Should have been handled by LoadingScreen, but failsafe
         requestMediaAccess(true, false).then(() => connect());
       }
     } else {
@@ -202,27 +187,12 @@ export default function App() {
 
   const handleSendText = async (text: string) => {
     if (!text.trim()) return;
+
+    // Improved offline handler with clear status notification
     if (!navigator.onLine) {
-      const offlineResponse: ZenResponse = {
-        emotion: 'calm',
-        wisdom_text: language === 'vi'
-          ? "Mạng không ổn định. Hãy quay về nương tựa nơi hơi thở."
-          : "Connection lost. Return to the island of self through breathing.",
-        wisdom_english: "Breathing in, I calm my body.",
-        user_transcript: text,
-        breathing: '4-7-8',
-        confidence: 1,
-        reasoning_steps: ['Offline Mode', 'Triggering Local Breathing'],
-        quantum_metrics: { coherence: 0.8, entanglement: 0.5, presence: 0.9 },
-        awareness_stage: 'mindful',
-        consciousness_dimensions: { contextual: 0.5, emotional: 0.5, cultural: 0.5, wisdom: 0.5, uncertainty: 0.5, relational: 0.5 },
-        ambient_sound: 'rain'
-      };
-      setZenData(offlineResponse);
-      setInputText('');
-      setSnackbar({ text: "Chế độ Offline: Tập thở", kind: "info" });
-      return;
+      setSnackbar({ text: "Chế độ tĩnh tại (Offline)", kind: "info" });
     }
+
     const response = await sendText(text);
     if (response) {
       setInputText('');
@@ -245,7 +215,8 @@ export default function App() {
   };
 
   return (
-    <div className="relative h-[100dvh] w-full overflow-hidden bg-stone-50 select-none font-sans text-stone-900">
+    <div className="relative h-[100dvh] w-full overflow-hidden select-none"
+      style={{ fontFamily: 'var(--font-body)', color: 'var(--zen-ink, #1c1917)' }}>
 
       {/* --- LAYER 0: Background & Overlays --- */}
       {isLoading && (
@@ -255,7 +226,7 @@ export default function App() {
       )}
 
       <div className="absolute inset-0 z-0">
-        <Suspense fallback={<div className="absolute inset-0 bg-stone-50" />}>
+        <Suspense fallback={<div className="absolute inset-0" style={{ background: 'var(--bg-gradient)' }} />}>
           <OrbViz
             analyser={analyserRef.current}
             emotion={zenData?.emotion || 'neutral'}
@@ -290,35 +261,75 @@ export default function App() {
         }}
       />
 
-      {/* --- LAYER 1: Top Floating Bar (Split Layout) --- */}
-
+      {/* --- LAYER 1: Top Floating Bar --- */}
       <div className="absolute top-0 left-0 right-0 p-4 pt-6 z-50 pointer-events-none flex justify-between items-start">
         {/* Left: Tools */}
-        <div className="pointer-events-auto flex items-center gap-1 bg-white/40 backdrop-blur-md rounded-full p-1 shadow-sm border border-white/40 transition-transform hover:scale-105">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1 transition-all duration-300 hover:scale-[1.02]"
+          style={{
+            background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+            backdropFilter: 'blur(20px) saturate(1.3)',
+            WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+            border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+          }}>
           <CameraScan onModeChange={handleModeChange} currentMode={culturalMode} />
-          <div className="h-4 w-px bg-stone-400/30 mx-0.5"></div>
+          <div className="h-4 w-px mx-0.5" style={{ background: 'rgba(120,113,108,0.12)' }}></div>
           <button
             onClick={toggleLanguage}
-            className="p-2.5 rounded-full text-stone-600 hover:bg-white/80 transition-all"
+            className="p-2.5 rounded-full transition-all duration-300 hover:scale-105"
+            style={{ color: 'var(--zen-stone-dark, #57534e)' }}
             aria-label="Toggle Language"
           >
-            <Languages size={18} />
+            <Languages size={17} strokeWidth={1.5} />
           </button>
         </div>
 
-        {/* Right: History & Reset */}
-        <div className="pointer-events-auto flex items-center gap-2">
+        {/* Right: Settings, History & Reset */}
+        <div className="pointer-events-auto flex items-center gap-1.5">
+          {/* Settings Button */}
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2.5 rounded-full transition-all duration-300 hover:scale-105 active:scale-95"
+            style={{
+              background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+              color: 'var(--zen-stone-dark, #57534e)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            }}
+            aria-label="Settings"
+            title="Cài đặt"
+          >
+            <Settings size={17} strokeWidth={1.5} />
+          </button>
+
           {zenData && (
             <button
               onClick={handleResetSession}
-              className="p-2.5 rounded-full bg-white/40 backdrop-blur-md text-stone-600 hover:bg-white/80 transition-all shadow-sm border border-white/40 animate-[fadeIn_0.5s]"
+              className="p-2.5 rounded-full transition-all duration-300 hover:scale-105 active:scale-95 animate-fadeIn"
+              style={{
+                background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+                color: 'var(--zen-stone-dark, #57534e)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+              }}
               aria-label="New Session"
               title="Bắt đầu phiên mới"
             >
-              <RotateCcw size={18} />
+              <RotateCcw size={17} strokeWidth={1.5} />
             </button>
           )}
-          <HistoryPanel history={history} onClear={() => setHistory([])} />
+          {/* History Button with badge */}
+          <div className="relative">
+            <HistoryPanel history={history} onClear={() => setHistory([])} />
+            {history.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[7px] font-bold flex items-center justify-center text-white"
+                style={{ background: '#f97316', boxShadow: '0 1px 4px rgba(249,115,22,0.3)' }}>
+                {history.length > 9 ? '9+' : history.length}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -334,17 +345,39 @@ export default function App() {
         </div>
       </div>
 
-      {/* LAYER: Stress Indicator (Left side, floating) */}
+      {/* LAYER: Stress Indicator (Desktop: floating left, Mobile: pill button) */}
       {zenData && status !== 'idle' && (
-        <div className="absolute top-36 left-4 z-40 pointer-events-none hidden lg:block animate-[fadeIn_0.5s_ease-out]">
-          <div className="pointer-events-auto">
-            <StressIndicator
-              data={zenData}
-              isConnected={connectionState === 'connected'}
-              isSpeaking={status === 'speaking'}
-            />
+        <>
+          {/* Desktop */}
+          <div className="absolute top-36 left-4 z-40 pointer-events-none hidden lg:block animate-fadeInUp"
+            style={{ animationDelay: '0.3s' }}>
+            <div className="pointer-events-auto">
+              <StressIndicator
+                data={zenData}
+                isConnected={connectionState === 'connected'}
+                isSpeaking={status === 'speaking'}
+              />
+            </div>
           </div>
-        </div>
+          {/* Mobile: floating pill */}
+          <div className="absolute top-[7rem] left-4 z-40 lg:hidden animate-fadeInUp">
+            <button
+              onClick={() => setIsStressSheetOpen(true)}
+              className="pointer-events-auto flex items-center gap-2 px-3 py-2 rounded-full transition-all duration-300 active:scale-95"
+              style={{
+                background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+              }}
+            >
+              <Activity size={13} strokeWidth={1.5} style={{ color: '#f97316' }} />
+              <span className="text-[10px] font-semibold" style={{ color: 'var(--zen-stone-dark)' }}>
+                {zenData.emotion}
+              </span>
+            </button>
+          </div>
+        </>
       )}
 
       {/* --- LAYER 2: Main Content (Scrollable) --- */}
@@ -357,69 +390,145 @@ export default function App() {
 
                 <button
                   onClick={() => setIsReasoningOpen(true)}
-                  className="self-center flex items-center gap-2 px-5 py-2.5 bg-white/50 backdrop-blur-md rounded-full text-xs font-bold text-stone-500 uppercase tracking-widest hover:bg-white hover:text-orange-600 hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+                  className="self-center flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-semibold uppercase tracking-[0.12em] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  style={{
+                    background: 'var(--glass-frosted, rgba(255,255,255,0.55))',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid var(--glass-border, rgba(255,255,255,0.45))',
+                    color: 'var(--zen-stone, #78716c)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ea580c'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(249,115,22,0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--zen-stone, #78716c)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; }}
                 >
-                  <Brain size={14} />
+                  <Brain size={13} strokeWidth={1.5} />
                   Xem phân tích tâm thức
                 </button>
               </>
             ) : (
-              /* IDLE STATE: Rotating Buddhist Teachings */
-              <div className="px-4 self-center max-w-md text-center">
-                <div
-                  key={quoteIndex}
-                  className="animate-[fadeIn_1s_ease-out]"
-                >
-                  <p
-                    className={`
-                        font-serif text-xl md:text-2xl italic leading-relaxed tracking-wide mb-3
-                        transition-all duration-1000 ease-in-out
-                        ${textContrastStyle.color} 
-                        ${textContrastStyle.shadow}
-                    `}
-                  >
-                    "{BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].text_vi}"
-                  </p>
-                  <p className={`text-sm italic opacity-60 mb-2 ${textContrastStyle.color}`}>
-                    "{BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].text_en}"
-                  </p>
-                  <p className={`text-[10px] uppercase tracking-widest opacity-40 ${textContrastStyle.color}`}>
-                    — {BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].source}
-                  </p>
-                </div>
-              </div>
+              /* IDLE STATE: Quote in a glass card — separated from orb */
+              <div className="mt-auto" />
             )}
           </div>
         </div>
       </div>
 
+      {/* --- LAYER 2.5: Idle Quote Card (above dock, below orb) --- */}
+      {!zenData && (
+        <div className="absolute bottom-28 left-0 right-0 z-40 pointer-events-none flex justify-center px-4">
+          <div
+            key={quoteIndex}
+            className="pointer-events-auto max-w-md w-full rounded-[24px] p-6 text-center zen-noise relative overflow-hidden animate-fadeInUp"
+            style={{
+              background: 'rgba(255, 255, 255, 0.82)',
+              backdropFilter: 'blur(28px) saturate(1.5)',
+              WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
+              border: '1px solid rgba(255,255,255,0.6)',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.03)',
+            }}
+          >
+            <div className="relative z-10">
+              <p
+                className="text-lg md:text-xl italic leading-relaxed tracking-wide mb-3"
+                style={{
+                  fontFamily: 'var(--font-wisdom)',
+                  color: 'var(--zen-ink, #1c1917)',
+                }}
+              >
+                "{BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].text_vi}"
+              </p>
+              <p className="text-[13px] italic mb-2"
+                style={{
+                  fontFamily: 'var(--font-wisdom)',
+                  color: 'var(--zen-stone, #78716c)',
+                  opacity: 0.6,
+                }}>
+                "{BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].text_en}"
+              </p>
+              <p className="text-[9px] uppercase tracking-[0.2em] mt-3"
+                style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
+                — {BUDDHIST_TEACHINGS[quoteIndex % BUDDHIST_TEACHINGS.length].source}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- LAYER 3: Bottom Floating Dock --- */}
       <div className="absolute bottom-8 left-0 right-0 z-50 flex flex-col items-center pointer-events-none px-4">
 
-        {/* Popup: Micro Practices */}
+        {/* Popup: Micro Practices with header */}
         {showPractices && (
-          <div className="pointer-events-auto mb-4 bg-white/90 backdrop-blur-xl rounded-[24px] p-2 shadow-2xl border border-white/60 animate-[slideUp_0.3s_ease-out] max-w-full origin-bottom">
-            <MicroPractices
-              onSelect={handlePracticeSelect}
-              disabled={status !== 'idle' && navigator.onLine}
-              lang={language}
-            />
+          <div className="pointer-events-auto mb-4 rounded-[24px] animate-slideUp origin-bottom zen-noise relative overflow-hidden"
+            style={{
+              background: 'rgba(255,255,255,0.92)',
+              backdropFilter: 'blur(28px) saturate(1.5)',
+              WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
+              border: '1px solid var(--glass-border-strong, rgba(255,255,255,0.65))',
+              boxShadow: 'var(--glass-shadow-elevated)',
+              maxWidth: '420px',
+              width: '100%',
+            }}>
+            <div className="relative z-10">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={13} style={{ color: '#f97316' }} strokeWidth={1.5} />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                    style={{ color: 'var(--zen-stone-dark, #57534e)' }}>
+                    Gợi ý thực hành
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowPractices(false)}
+                  className="p-1.5 rounded-full transition-all duration-200"
+                  style={{ color: 'var(--zen-stone-light, #a8a29e)', background: 'rgba(120,113,108,0.06)' }}
+                >
+                  <span className="text-[10px] font-medium">✕</span>
+                </button>
+              </div>
+              {/* Scroll indicator hint */}
+              <div className="px-4 pb-1">
+                <div className="flex items-center gap-1">
+                  <div className="h-px flex-1" style={{ background: 'rgba(120,113,108,0.06)' }} />
+                  <span className="text-[8px] uppercase tracking-[0.15em]" style={{ color: 'var(--zen-stone-light, #a8a29e)', opacity: 0.6 }}>← vuốt →</span>
+                  <div className="h-px flex-1" style={{ background: 'rgba(120,113,108,0.06)' }} />
+                </div>
+              </div>
+              <MicroPractices
+                onSelect={handlePracticeSelect}
+                disabled={status !== 'idle' && navigator.onLine}
+                lang={language}
+              />
+            </div>
           </div>
         )}
 
         {/* Dock Container */}
         <div
-          className="pointer-events-auto bg-white/60 backdrop-blur-2xl border border-white/40 shadow-[0_8px_32px_rgba(249,115,22,0.15)] rounded-[32px] p-2 flex items-center justify-center gap-4 transition-all duration-300 ease-out"
-          style={{ minWidth: inputMode === 'voice' ? '240px' : '320px' }}
+          className="pointer-events-auto rounded-[28px] p-2 flex items-center justify-center gap-4 transition-all duration-300"
+          style={{
+            background: 'var(--glass-clear, rgba(255,255,255,0.72))',
+            backdropFilter: 'blur(28px) saturate(1.5)',
+            WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
+            border: '1px solid var(--glass-border-strong, rgba(255,255,255,0.65))',
+            boxShadow: 'var(--glass-shadow-saffron)',
+            minWidth: inputMode === 'voice' ? '240px' : '320px',
+          }}
         >
           {inputMode === 'voice' ? (
             <>
               <button
                 onClick={() => setShowPractices(!showPractices)}
-                className={`p-4 rounded-full text-stone-500 hover:bg-white transition-all duration-300 ${showPractices ? 'bg-white text-orange-500 shadow-sm' : ''}`}
+                className="p-4 rounded-full transition-all duration-300"
+                style={{
+                  background: showPractices ? 'rgba(249,115,22,0.08)' : 'transparent',
+                  color: showPractices ? '#ea580c' : 'var(--zen-stone, #78716c)',
+                  boxShadow: showPractices ? '0 2px 8px rgba(249,115,22,0.08)' : 'none',
+                }}
                 title="Gợi ý thực hành"
               >
-                <Sparkles size={24} strokeWidth={1.5} />
+                <Sparkles size={22} strokeWidth={1.5} />
               </button>
 
               {/* Voice Button */}
@@ -429,49 +538,67 @@ export default function App() {
 
               <button
                 onClick={toggleInputMode}
-                className="p-4 rounded-full text-stone-500 hover:bg-white transition-all duration-300"
+                className="p-4 rounded-full transition-all duration-300"
+                style={{ color: 'var(--zen-stone, #78716c)' }}
                 title="Chuyển sang gõ phím"
               >
-                <Keyboard size={24} strokeWidth={1.5} />
+                <Keyboard size={22} strokeWidth={1.5} />
               </button>
             </>
           ) : (
             <div className="flex items-center gap-2 px-2 w-full max-w-md">
+              {/* MicroPractices icon — also in text mode */}
+              <button
+                onClick={() => setShowPractices(!showPractices)}
+                className="p-2.5 rounded-full transition-all duration-300 shrink-0"
+                style={{
+                  background: showPractices ? 'rgba(249,115,22,0.08)' : 'transparent',
+                  color: showPractices ? '#ea580c' : 'var(--zen-stone-light, #a8a29e)',
+                }}
+                title="Gợi ý thực hành"
+              >
+                <Sparkles size={18} strokeWidth={1.5} />
+              </button>
+
+              <div className="w-px h-5 rounded-full" style={{ background: 'rgba(120,113,108,0.08)' }} />
+
               <div className="flex-1 relative">
                 <input
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendText(inputText)}
-                  placeholder={language === 'vi' ? "Viết cho Thầy..." : "Write to Thầy..."}
-                  className="w-full bg-transparent border-none focus:ring-0 text-stone-800 placeholder:text-stone-400/70 text-base py-3 px-2 font-serif"
+                  placeholder={language === 'vi' ? "Chia sẻ với tôi..." : "Share with me..."}
+                  className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-base py-3 px-2"
+                  style={{
+                    fontFamily: 'var(--font-wisdom)',
+                    color: 'var(--zen-ink, #1c1917)',
+                    caretColor: '#f97316',
+                  }}
                   autoFocus
                 />
-                {inputText.length > 0 && (
-                  <button
-                    onClick={() => setInputText('')}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-stone-300 hover:text-stone-500"
-                  >
-                    {/* Clear icon if needed */}
-                  </button>
-                )}
               </div>
 
               <button
                 onClick={() => handleSendText(inputText)}
                 disabled={!inputText.trim() || status === 'processing'}
-                className="p-3 bg-stone-800 text-white rounded-full hover:bg-orange-600 disabled:opacity-50 disabled:bg-stone-300 transition-colors shadow-lg"
+                className="p-3 rounded-full text-white transition-all duration-300 disabled:opacity-40 active:scale-95"
+                style={{
+                  background: inputText.trim() ? 'linear-gradient(135deg, #1c1917, #292524)' : '#d6d3d1',
+                  boxShadow: inputText.trim() ? '0 4px 16px rgba(28,25,23,0.2)' : 'none',
+                }}
               >
-                <SendHorizontal size={20} />
+                <SendHorizontal size={18} />
               </button>
 
-              <div className="w-px h-6 bg-stone-300/50 mx-1" />
+              <div className="w-px h-5 rounded-full" style={{ background: 'rgba(120,113,108,0.08)' }} />
 
               <button
                 onClick={toggleInputMode}
-                className="p-2 text-stone-400 hover:text-stone-600 transition-colors"
+                className="p-2 transition-colors duration-300 shrink-0"
+                style={{ color: 'var(--zen-stone-light, #a8a29e)' }}
               >
-                <Mic size={24} strokeWidth={1.5} />
+                <Mic size={20} strokeWidth={1.5} />
               </button>
             </div>
           )}
@@ -485,6 +612,62 @@ export default function App() {
         title="Phân tích Tâm thức"
       >
         {zenData && <ReasoningPanel data={zenData} onBack={() => setIsReasoningOpen(false)} />}
+      </BottomSheet>
+
+      <BottomSheet
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        title="Cài đặt"
+      >
+        <SettingsSheet
+          language={language}
+          inputMode={inputMode}
+          culturalMode={culturalMode}
+          onLanguageChange={(lang) => {
+            setLanguage(lang);
+            setSnackbar({ text: lang === 'vi' ? 'Tiếng Việt' : 'English', kind: 'success' });
+            if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
+          }}
+          onInputModeChange={(mode) => {
+            disconnect();
+            setInputMode(mode);
+          }}
+          onCulturalModeChange={(mode) => {
+            setCulturalMode(mode);
+            setSnackbar({ text: `Chế độ: ${mode}`, kind: 'success' });
+            if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
+          }}
+          onStartBreathing={(type) => {
+            setShowBreathing(true);
+            setIsSettingsOpen(false);
+            // Set breathing type — use existing zenData or create minimal stub
+            const breathingData: ZenResponse = zenData ? { ...zenData, breathing: type } : {
+              emotion: 'calm', wisdom_text: '', wisdom_english: '', user_transcript: '',
+              breathing: type, confidence: 1, reasoning_steps: ['Manual Breathing'],
+              quantum_metrics: { coherence: 0.8, entanglement: 0.5, presence: 0.9 },
+              awareness_stage: 'mindful' as const,
+              consciousness_dimensions: { contextual: 0.5, emotional: 0.5, cultural: 0.5, wisdom: 0.5, uncertainty: 0.5, relational: 0.5 },
+            };
+            setZenData(breathingData);
+          }}
+          onAmbientChange={(sound) => setCurrentAmbient(sound)}
+          currentAmbient={currentAmbient}
+        />
+      </BottomSheet>
+
+      {/* StressIndicator Mobile Sheet */}
+      <BottomSheet
+        open={isStressSheetOpen}
+        onClose={() => setIsStressSheetOpen(false)}
+        title="Trạng thái Tâm thức"
+      >
+        {zenData && (
+          <StressIndicator
+            data={zenData}
+            isConnected={connectionState === 'connected'}
+            isSpeaking={status === 'speaking'}
+          />
+        )}
       </BottomSheet>
 
       {snackbar && (

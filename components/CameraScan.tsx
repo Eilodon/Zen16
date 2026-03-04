@@ -26,12 +26,10 @@ export const CameraScan: React.FC<Props> = ({ onModeChange, currentMode }) => {
       e.preventDefault();
     }
 
-    // Use centralized permission logic
     const granted = await requestCamera();
 
     if (granted) {
       try {
-        // Request the stream knowing permission is likely granted
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         streamRef.current = s;
         setIsOpen(true);
@@ -52,7 +50,6 @@ export const CameraScan: React.FC<Props> = ({ onModeChange, currentMode }) => {
     setIsOpen(false);
   };
 
-  // Bind video element to stream when open
   useEffect(() => {
     if (isOpen && videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -117,54 +114,87 @@ export const CameraScan: React.FC<Props> = ({ onModeChange, currentMode }) => {
         <button
           type="button"
           onClick={(e) => !isOpen && startCamera(e)}
-          className={`p-3 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 ${currentMode === 'VN' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white/80 backdrop-blur text-stone-700 border-stone-200'
-            } border`}
+          className="p-2.5 rounded-full transition-all duration-300 hover:scale-105 active:scale-95"
+          style={{
+            background: currentMode === 'VN' ? 'rgba(245,158,11,0.1)' : 'var(--glass-frosted, rgba(255,255,255,0.55))',
+            color: currentMode === 'VN' ? '#b45309' : 'var(--zen-stone-dark, #57534e)',
+            border: `1px solid ${currentMode === 'VN' ? 'rgba(245,158,11,0.2)' : 'var(--glass-border, rgba(255,255,255,0.45))'}`,
+            backdropFilter: 'blur(12px)',
+          }}
           aria-label="Scan Environment"
           title="Quét không gian để chọn Mode"
         >
-          <Camera size={20} />
+          <Camera size={18} strokeWidth={1.5} />
         </button>
-        <span className={`text-[10px] font-bold px-2 py-1 rounded-full mt-1.5 shadow-sm transition-colors ${currentMode === 'VN' ? 'bg-amber-500 text-white' : 'bg-stone-500 text-white'
-          }`}>
+        <span className="text-[9px] font-semibold px-2 py-1 rounded-full mt-1.5 tracking-[0.1em]"
+          style={{
+            background: currentMode === 'VN' ? '#b45309' : 'var(--zen-stone-dark, #57534e)',
+            color: 'white',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+          }}>
           {currentMode}
         </span>
       </div>
 
       {isOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4">
-          <div className="relative w-full max-w-md bg-stone-900 rounded-2xl overflow-hidden border border-stone-700 shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 animate-fadeIn"
+          style={{ background: 'rgba(10,9,8,0.92)', backdropFilter: 'blur(8px)' }}>
+          <div className="relative w-full max-w-md overflow-hidden rounded-[24px]"
+            style={{
+              background: 'rgba(28,25,23,0.9)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+            }}>
             {!isScanning ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-64 object-cover"
-              />
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-64 object-cover"
+                />
+                {/* Scan frame corners */}
+                <div className="absolute inset-4 pointer-events-none" style={{ border: '1.5px solid rgba(249,115,22,0.3)', borderRadius: '12px' }}>
+                  <div className="absolute -top-[1px] -left-[1px] w-4 h-4 border-t-2 border-l-2 border-orange-500 rounded-tl-lg" />
+                  <div className="absolute -top-[1px] -right-[1px] w-4 h-4 border-t-2 border-r-2 border-orange-500 rounded-tr-lg" />
+                  <div className="absolute -bottom-[1px] -left-[1px] w-4 h-4 border-b-2 border-l-2 border-orange-500 rounded-bl-lg" />
+                  <div className="absolute -bottom-[1px] -right-[1px] w-4 h-4 border-b-2 border-r-2 border-orange-500 rounded-br-lg" />
+                </div>
+              </div>
             ) : (
-              <div className="w-full h-64 flex items-center justify-center bg-stone-800">
-                <ScanEye className="animate-pulse text-amber-500 w-16 h-16" />
+              <div className="w-full h-64 flex items-center justify-center" style={{ background: 'rgba(28,25,23,0.9)' }}>
+                <ScanEye className="animate-pulse w-14 h-14" style={{ color: '#f97316' }} strokeWidth={1.5} />
               </div>
             )}
 
-            <div className="p-4 flex flex-col gap-3">
-              <p className="text-stone-300 text-sm text-center">
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-sm text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 Ảnh được gửi ẩn danh để AI phân tích bối cảnh và bị xóa ngay lập tức.
               </p>
-              <div className="flex gap-4 justify-center">
+              <div className="flex gap-3 justify-center">
                 <button
                   onClick={closeCamera}
                   disabled={isScanning}
-                  className="px-4 py-2 rounded-full bg-stone-700 text-white flex items-center gap-2 hover:bg-stone-600 transition-colors"
+                  className="px-5 py-2.5 rounded-full flex items-center gap-2 text-sm font-medium transition-all duration-300"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'rgba(255,255,255,0.6)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}
                 >
-                  <X size={16} /> Hủy
+                  <X size={14} /> Hủy
                 </button>
                 <button
                   onClick={captureAndAnalyze}
                   disabled={isScanning}
-                  className="px-6 py-2 rounded-full bg-orange-600 text-white flex items-center gap-2 font-bold hover:bg-orange-700 transition-colors shadow-lg"
+                  className="px-6 py-2.5 rounded-full flex items-center gap-2 text-sm font-semibold text-white transition-all duration-300 active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                    boxShadow: '0 4px 16px rgba(249,115,22,0.3)',
+                  }}
                 >
-                  {isScanning ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  {isScanning ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                   Quét
                 </button>
               </div>

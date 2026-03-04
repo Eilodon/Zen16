@@ -28,7 +28,7 @@ export function useZenSession({
   const handleDisconnect = React.useCallback((reason?: string, isReconnecting?: boolean) => {
     if (isReconnecting) {
       setConnectionState('reconnecting');
-      if (reason) onError(reason, "warn"); // Show "Reconnecting..."
+      if (reason) onError(reason, "info"); // Show "Reconnecting..."
       return;
     }
 
@@ -109,15 +109,16 @@ export function useZenSession({
 
       // Specific Error Handling
       if (e.message.includes("PermissionDenied")) {
-        onError("Không có quyền Microphone. Đã chuyển sang chế độ Chat.", "warn");
+        onError("Không có quyền Microphone. Đã chuyển sang chế độ Chat.", "info");
         setInputMode('text'); // Auto-switch to text
       } else if (e.message.includes("NoMicrophone")) {
-        onError("Không tìm thấy Microphone.", "error");
+        onError("Không tìm thấy Microphone.", "info");
         setInputMode('text');
       } else if (e.message.includes("API_KEY_MISSING")) {
         onError("Vui lòng nhập API Key.", "warn");
       } else {
-        onError("Lỗi kết nối micro hoặc mạng.", "error");
+        // Silently fail connection errors to text mode
+        setInputMode('text');
       }
 
       liveSessionRef.current?.disconnect();

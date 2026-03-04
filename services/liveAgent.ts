@@ -1,4 +1,5 @@
 import { ZenResponse, VisionAnalysis, CulturalMode, Language } from "../types";
+import { getRandomTeaching, BUDDHIST_TEACHINGS } from "../data/buddhistTeachings";
 import {
     AUDIO_WORKLET_CODE,
     base64EncodeAudio,
@@ -18,17 +19,47 @@ export const sendZenTextQuery = async (
     mode: CulturalMode,
     language: Language
 ): Promise<ZenResponse> => {
-    // Fallback for text mode — connects briefly to live session
+    // Basic emotion matching heuristic from text
+    const lowerText = text.toLowerCase();
+    let detectedEmotion: ZenResponse['emotion'] = 'neutral';
+    let teaching = null;
+
+    // Direct context matching for micro-practices and specific topics
+    if (lowerText.includes('trà') || lowerText.includes('tea')) {
+        teaching = BUDDHIST_TEACHINGS.find(t => t.id === 'hh-02');
+        detectedEmotion = 'calm';
+    } else if (lowerText.includes('bước đi') || lowerText.includes('walking')) {
+        teaching = BUDDHIST_TEACHINGS.find(t => t.id === 'hp-02');
+        detectedEmotion = 'calm';
+    } else if (lowerText.includes('ăn') || lowerText.includes('eating')) {
+        teaching = BUDDHIST_TEACHINGS.find(t => t.id === 'cn-03');
+        detectedEmotion = 'calm';
+    } else if (lowerText.includes('kẹt xe') || lowerText.includes('traffic')) {
+        teaching = BUDDHIST_TEACHINGS.find(t => t.id === 'hp-01');
+        detectedEmotion = 'stressed';
+    } else if (lowerText.includes('ngủ') || lowerText.includes('sleep')) {
+        teaching = BUDDHIST_TEACHINGS.find(t => t.id === 'hp-03');
+        detectedEmotion = 'anxious';
+    } else {
+        // Safe word matching to avoid partial matches (e.g. "chán" in "chánh niệm")
+        const hasWord = (words: string) => new RegExp(`(^|\\s|[.,?!])(${words})(?=[\\s.,?!]|$)`, 'i').test(lowerText);
+
+        if (hasWord('buồn|khóc|chán|mất|cô đơn|sad|lonely|cry|lost')) detectedEmotion = 'sad';
+        else if (hasWord('giận|ghét|bực|tức|angry|hate|frustrated')) detectedEmotion = 'stressed';
+        else if (hasWord('lo âu|sợ|căng thẳng|áp lực|stress|anxious|fear')) detectedEmotion = 'anxious';
+        else if (hasWord('vui|hạnh phúc|happy|joy')) detectedEmotion = 'joyful';
+
+        teaching = getRandomTeaching(detectedEmotion) || getRandomTeaching('neutral');
+    }
+
     return {
-        emotion: "calm",
-        wisdom_text:
-            "Thở vào tâm tĩnh lặng, thở ra miệng mỉm cười.",
-        wisdom_english:
-            "Breathing in, I calm body and mind. Breathing out, I smile.",
+        emotion: detectedEmotion,
+        wisdom_text: language === 'vi' ? (teaching?.text_vi || "Hãy thở chậm lại.") : (teaching?.text_en || "Breathe slowly."),
+        wisdom_english: teaching?.text_en || "Breathe slowly.",
         user_transcript: text,
-        breathing: "4-7-8",
-        confidence: 0.9,
-        reasoning_steps: ["Received text", "Generating mindful response"],
+        breathing: (teaching?.practice as ZenResponse['breathing']) || "4-7-8",
+        confidence: 0.8,
+        reasoning_steps: ["Offline Mode", `Detected emotion: ${detectedEmotion}`, "Selected matching teaching"],
         quantum_metrics: { coherence: 0.8, entanglement: 0.7, presence: 0.9 },
         awareness_stage: "mindful",
         consciousness_dimensions: {
@@ -39,7 +70,7 @@ export const sendZenTextQuery = async (
             uncertainty: 0.2,
             relational: 0.8,
         },
-        ambient_sound: "bowl",
+        ambient_sound: "rain",
     };
 };
 
@@ -387,6 +418,7 @@ export class ZenLiveSession {
             float32Array.length,
             24000
         );
+        // @ts-ignore - TS complains about ArrayBufferLike vs ArrayBuffer for float32Array
         buffer.copyToChannel(float32Array, 0);
 
         const source = this.inputContext.createBufferSource();
@@ -449,6 +481,7 @@ export class ZenLiveSession {
 }
 
 // ─── Vision Analysis (delegates to backend) ──────────────────
+// DEPRECATED/PLACEHOLDER: Vision analysis is now handled natively by Gemini Live API
 export const analyzeEnvironment = async (
     apiKey: string,
     base64Image: string

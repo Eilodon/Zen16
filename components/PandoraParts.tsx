@@ -8,17 +8,18 @@ interface SecurityCueProps {
   mode: 'on-device' | 'hybrid' | 'cloud';
 }
 export const SecurityCue: React.FC<SecurityCueProps> = ({ mode }) => {
-  const config = {
-    'on-device': { color: 'bg-emerald-100 text-emerald-700 border-emerald-200', text: 'Riêng tư' },
-    'hybrid': { color: 'bg-blue-100 text-blue-700 border-blue-200', text: 'Bảo mật lai' },
-    'cloud': { color: 'bg-stone-100 text-stone-500 border-stone-200', text: 'Mã hóa đám mây' }
+  const config: Record<string, { bg: string; text: string; border: string; label: string }> = {
+    'on-device': { bg: 'rgba(16,185,129,0.06)', text: '#059669', border: 'rgba(16,185,129,0.15)', label: 'Riêng tư' },
+    'hybrid': { bg: 'rgba(59,130,246,0.06)', text: '#2563eb', border: 'rgba(59,130,246,0.15)', label: 'Bảo mật lai' },
+    'cloud': { bg: 'rgba(120,113,108,0.04)', text: '#78716c', border: 'rgba(120,113,108,0.1)', label: 'Mã hóa' },
   };
   const c = config[mode] || config['cloud'];
-  
+
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${c.color} text-[10px] font-bold uppercase tracking-wider shadow-sm`}>
-      <ShieldCheck size={10} />
-      <span>{c.text}</span>
+    <div className="flex items-center gap-1.5 px-2 py-[3px] rounded-full text-[9px] font-semibold uppercase tracking-[0.12em]"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>
+      <ShieldCheck size={9} strokeWidth={2} />
+      <span>{c.label}</span>
     </div>
   );
 };
@@ -33,19 +34,31 @@ export const FeedbackRow: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center gap-2 mt-6 pt-4 border-t border-stone-100/50 animate-[fadeIn_0.5s_ease-out]">
-      <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mr-2">Hữu ích?</span>
+    <div className="flex items-center gap-2 mt-6 pt-4 animate-fadeIn"
+      style={{ borderTop: '1px solid rgba(120,113,108,0.06)' }}>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] mr-2"
+        style={{ color: 'var(--zen-stone-light, #a8a29e)' }}>
+        Hữu ích?
+      </span>
       <button
         onClick={() => handleFeedback('up')}
-        className={`p-2 rounded-full transition-all duration-300 ${status === 'up' ? 'bg-emerald-100 text-emerald-600' : 'text-stone-300 hover:bg-stone-50 hover:text-stone-500'}`}
+        className="p-2 rounded-full transition-all duration-300"
+        style={{
+          background: status === 'up' ? 'rgba(16,185,129,0.08)' : 'transparent',
+          color: status === 'up' ? '#10b981' : '#d6d3d1',
+        }}
       >
-        <ThumbsUp size={16} />
+        <ThumbsUp size={15} strokeWidth={1.5} />
       </button>
       <button
         onClick={() => handleFeedback('down')}
-        className={`p-2 rounded-full transition-all duration-300 ${status === 'down' ? 'bg-stone-200 text-stone-600' : 'text-stone-300 hover:bg-stone-50 hover:text-stone-500'}`}
+        className="p-2 rounded-full transition-all duration-300"
+        style={{
+          background: status === 'down' ? 'rgba(120,113,108,0.08)' : 'transparent',
+          color: status === 'down' ? '#57534e' : '#d6d3d1',
+        }}
       >
-        <ThumbsDown size={16} />
+        <ThumbsDown size={15} strokeWidth={1.5} />
       </button>
     </div>
   );
@@ -68,7 +81,6 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, title, 
     if (open) {
       setIsRendered(true);
       document.body.style.overflow = 'hidden';
-      // Slight delay to allow render before animating in
       requestAnimationFrame(() => setTranslateY(0));
     } else {
       document.body.style.overflow = '';
@@ -91,9 +103,9 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, title, 
   const handleTouchEnd = () => {
     if (translateY > 100) {
       onClose();
-      setTranslateY(0); // Reset after close trigger
+      setTranslateY(0);
     } else {
-      setTranslateY(0); // Snap back
+      setTranslateY(0);
     }
   };
 
@@ -102,37 +114,50 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ open, onClose, title, 
   return (
     <>
       {/* Backdrop */}
-      <div 
-        className={`fixed inset-0 bg-stone-900/40 backdrop-blur-[2px] z-[60] transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0'}`}
+      <div
+        className={`fixed inset-0 z-[60] transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0'}`}
+        style={{ background: 'rgba(10,9,8,0.4)', backdropFilter: 'blur(4px)' }}
         onClick={onClose}
       />
-      
+
       {/* Sheet */}
-      <div 
-        className={`fixed bottom-0 left-0 right-0 z-[60] bg-white/95 backdrop-blur-xl rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.15)] transition-transform duration-300 cubic-bezier(0.32, 0.72, 0, 1) flex flex-col max-h-[85vh]`}
-        style={{ transform: open ? `translateY(${translateY}px)` : 'translateY(100%)' }}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-[60] flex flex-col max-h-[85vh] transition-transform duration-300"
+        style={{
+          transform: open ? `translateY(${translateY}px)` : 'translateY(100%)',
+          transitionTimingFunction: 'var(--ease-smooth)',
+          background: 'rgba(255,255,255,0.96)',
+          backdropFilter: 'blur(32px) saturate(1.5)',
+          WebkitBackdropFilter: 'blur(32px) saturate(1.5)',
+          borderRadius: '28px 28px 0 0',
+          boxShadow: '0 -10px 48px rgba(0,0,0,0.12)',
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {/* Drag Handle */}
         <div className="w-full pt-4 pb-2 flex justify-center shrink-0 cursor-grab active:cursor-grabbing">
-          <div className="w-12 h-1.5 bg-stone-300 rounded-full opacity-50" />
+          <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(120,113,108,0.15)' }} />
         </div>
 
         {/* Header */}
-        <div className="px-6 pb-4 flex justify-between items-center shrink-0 border-b border-stone-100/50">
-           <h3 className="font-serif font-bold text-lg text-stone-800 tracking-tight">{title}</h3>
-           <button 
-             onClick={onClose} 
-             className="p-2 bg-stone-100 rounded-full text-stone-500 hover:bg-stone-200 transition-colors"
-           >
-             <X size={18} />
-           </button>
+        <div className="px-6 pb-4 flex justify-between items-center shrink-0"
+          style={{ borderBottom: '1px solid rgba(120,113,108,0.06)' }}>
+          <h3 className="font-medium text-lg tracking-tight" style={{ fontFamily: 'var(--font-wisdom)', color: 'var(--zen-ink)' }}>
+            {title}
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full transition-all duration-200"
+            style={{ background: 'rgba(120,113,108,0.05)', color: 'var(--zen-stone)' }}
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 pb-12 overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-6 pb-12 overscroll-contain custom-scrollbar">
           {children}
         </div>
       </div>
