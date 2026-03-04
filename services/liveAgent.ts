@@ -89,6 +89,7 @@ export class ZenLiveSession {
 
     // Audio
     private inputContext: AudioContext | null = null;
+    private inputSource: MediaStreamAudioSourceNode | null = null;
     private workletNode: AudioWorkletNode | null = null;
     private vad: RobustVoiceDetector | null = null;
     private nextStartTime = 0;
@@ -99,6 +100,7 @@ export class ZenLiveSession {
     private ws: WebSocket | null = null;
     private isManuallyClosed = false;
     private reconnectAttempts = 0;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly MAX_RETRIES = 5;
 
     // Camera & Vision
@@ -144,159 +146,167 @@ export class ZenLiveSession {
             this.isManuallyClosed = false;
             this.reconnectAttempts = 0;
         }
+        this.teardownConnectionState(true);
         this.resetIdleTimer();
 
+        window.removeEventListener("online", this.boundHandleNetworkRecovery);
+        window.removeEventListener("offline", this.boundHandleNetworkOffline);
         window.addEventListener("online", this.boundHandleNetworkRecovery);
         window.addEventListener("offline", this.boundHandleNetworkOffline);
 
-        // ── Step 1: Get User Media (audio + video for vision) ──
-        let stream: MediaStream;
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 16000,
-                },
-                video: { facingMode: "user", width: 640, height: 480 },
-            });
-            this.videoStream = stream;
-        } catch {
+            // ── Step 1: Get User Media (audio + video for vision) ──
+            let stream: MediaStream;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000,
+                    },
+                    video: { facingMode: "user", width: 640, height: 480 },
                 });
+                this.videoStream = stream;
             } catch {
-                throw new Error("PermissionDenied");
-            }
-        }
-
-        // ── Step 2: Audio Context ──
-        this.inputContext = await getSharedAudioContext();
-        this.nextStartTime = this.inputContext.currentTime;
-
-        // ── Step 3: VAD + Worklet ──
-        this.vad = new RobustVoiceDetector(this.inputContext.sampleRate);
-        const blob = new Blob([AUDIO_WORKLET_CODE], {
-            type: "application/javascript",
-        });
-        const workletUrl = URL.createObjectURL(blob);
-        try {
-            await this.inputContext.audioWorklet.addModule(workletUrl);
-        } catch (e: any) {
-            if (!e.message?.includes("already exists"))
-                console.warn("Worklet warning:", e);
-        }
-        URL.revokeObjectURL(workletUrl);
-
-        const inputSource =
-            this.inputContext.createMediaStreamSource(stream);
-        this.workletNode = new AudioWorkletNode(
-            this.inputContext,
-            "zen-audio-processor"
-        );
-        inputSource.connect(this.workletNode);
-
-        const silentGain = this.inputContext.createGain();
-        silentGain.gain.value = 0;
-        this.workletNode
-            .connect(silentGain)
-            .connect(this.inputContext.destination);
-
-        const analyser = this.inputContext.createAnalyser();
-        inputSource.connect(analyser);
-
-        // ── Step 4.5: Init Face Landmarker (Background) ──
-        this.initFaceLandmarker();
-
-        // ── Step 5: Connect WebSocket to Cloud Run ──
-        const wsAccessToken = await getWebSocketAccessToken();
-        this.ws = new WebSocket(buildWsUrlWithToken(WS_URL, wsAccessToken));
-        this.ws.binaryType = "arraybuffer";
-
-        this.ws.onopen = () => {
-            console.log("[Zen16] WebSocket connected to backend");
-            this.reconnectAttempts = 0;
-            this.onDisconnectCallback(undefined, false);
-        };
-
-        this.ws.onmessage = async (event) => {
-            this.resetIdleTimer();
-            if (event.data instanceof ArrayBuffer) {
-                // Incoming binary audio from Gemini
-                this.isAiSpeaking = true;
-                this.onAudioActivity(true);
-                const audioData = this.decodeInt16ToFloat32(event.data);
-                this.scheduleAudioChunk(audioData);
-                return;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                    });
+                } catch {
+                    throw new Error("PermissionDenied");
+                }
             }
 
+            // ── Step 2: Audio Context ──
+            this.inputContext = await getSharedAudioContext();
+            this.nextStartTime = this.inputContext.currentTime;
+
+            // ── Step 3: VAD + Worklet ──
+            this.vad = new RobustVoiceDetector(this.inputContext.sampleRate);
+            const blob = new Blob([AUDIO_WORKLET_CODE], {
+                type: "application/javascript",
+            });
+            const workletUrl = URL.createObjectURL(blob);
             try {
-                const msg = JSON.parse(event.data as string);
-
-                switch (msg.type) {
-                    case "zen_state":
-                        // Tool call result from Gemini → update UI
-                        this.onStateChange(msg.data);
-                        break;
-
-                    case "interrupted":
-                        // Barge-in: user interrupted AI
-                        this.interruptPlayback();
-                        this.isAiSpeaking = false;
-                        this.onAudioActivity(false);
-                        break;
-
-                    case "turn_complete":
-                        setTimeout(() => {
-                            if (this.isAiSpeaking) {
-                                this.isAiSpeaking = false;
-                                this.onAudioActivity(false);
-                            }
-                        }, 800);
-                        break;
-
-                    case "error":
-                        console.error("[Backend Error]", msg.data);
-                        break;
-                }
-            } catch (e) {
-                console.error("Failed to parse WS message", e);
+                await this.inputContext.audioWorklet.addModule(workletUrl);
+            } catch (e: any) {
+                if (!e.message?.includes("already exists"))
+                    console.warn("Worklet warning:", e);
             }
-        };
+            URL.revokeObjectURL(workletUrl);
 
-        this.ws.onclose = (e) => this.handleConnectionLoss("closed", e);
-        this.ws.onerror = () => this.handleConnectionLoss("error");
+            this.inputSource =
+                this.inputContext.createMediaStreamSource(stream);
+            this.workletNode = new AudioWorkletNode(
+                this.inputContext,
+                "zen-audio-processor"
+            );
+            this.inputSource.connect(this.workletNode);
 
-        // ── Step 5: Forward audio frames via WebSocket ──
-        this.workletNode.port.onmessage = (event) => {
-            const { type, buffer } = event.data;
-            if (type === "input_data" && this.vad) {
-                const inputData = buffer as Float32Array;
-                if (this.vad.process(inputData)) {
-                    this.resetIdleTimer();
+            const silentGain = this.inputContext.createGain();
+            silentGain.gain.value = 0;
+            this.workletNode
+                .connect(silentGain)
+                .connect(this.inputContext.destination);
 
-                    // Barge-in: interrupt AI playback when user speaks
-                    if (this.isAiSpeaking) {
-                        this.interruptPlayback();
-                        this.isAiSpeaking = false;
-                        this.onAudioActivity(false);
+            const analyser = this.inputContext.createAnalyser();
+            this.inputSource.connect(analyser);
+
+            // ── Step 4.5: Init Face Landmarker (Background) ──
+            this.initFaceLandmarker();
+
+            // ── Step 5: Connect WebSocket to Cloud Run ──
+            const wsAccessToken = await getWebSocketAccessToken();
+            this.ws = new WebSocket(buildWsUrlWithToken(WS_URL, wsAccessToken));
+            this.ws.binaryType = "arraybuffer";
+
+            this.ws.onopen = () => {
+                console.log("[Zen16] WebSocket connected to backend");
+                this.reconnectAttempts = 0;
+                this.onDisconnectCallback(undefined, false);
+            };
+
+            this.ws.onmessage = async (event) => {
+                this.resetIdleTimer();
+                if (event.data instanceof ArrayBuffer) {
+                    // Incoming binary audio from Gemini
+                    this.isAiSpeaking = true;
+                    this.onAudioActivity(true);
+                    const audioData = this.decodeInt16ToFloat32(event.data);
+                    this.scheduleAudioChunk(audioData);
+                    return;
+                }
+
+                try {
+                    const msg = JSON.parse(event.data as string);
+
+                    switch (msg.type) {
+                        case "zen_state":
+                            // Tool call result from Gemini → update UI
+                            this.onStateChange(msg.data);
+                            break;
+
+                        case "interrupted":
+                            // Barge-in: user interrupted AI
+                            this.interruptPlayback();
+                            this.isAiSpeaking = false;
+                            this.onAudioActivity(false);
+                            break;
+
+                        case "turn_complete":
+                            setTimeout(() => {
+                                if (this.isAiSpeaking) {
+                                    this.isAiSpeaking = false;
+                                    this.onAudioActivity(false);
+                                }
+                            }, 800);
+                            break;
+
+                        case "error":
+                            console.error("[Backend Error]", msg.data);
+                            break;
                     }
+                } catch (e) {
+                    console.error("Failed to parse WS message", e);
+                }
+            };
 
-                    if (this.ws?.readyState === WebSocket.OPEN) {
-                        const buffer = floatTo16BitPCM(inputData);
-                        this.ws.send(buffer);
+            this.ws.onclose = (e) => this.handleConnectionLoss("closed", e);
+            this.ws.onerror = () => this.handleConnectionLoss("error");
+
+            // ── Step 5: Forward audio frames via WebSocket ──
+            this.workletNode.port.onmessage = (event) => {
+                const { type, buffer } = event.data;
+                if (type === "input_data" && this.vad) {
+                    const inputData = buffer as Float32Array;
+                    if (this.vad.process(inputData)) {
+                        this.resetIdleTimer();
+
+                        // Barge-in: interrupt AI playback when user speaks
+                        if (this.isAiSpeaking) {
+                            this.interruptPlayback();
+                            this.isAiSpeaking = false;
+                            this.onAudioActivity(false);
+                        }
+
+                        if (this.ws?.readyState === WebSocket.OPEN) {
+                            const buffer = floatTo16BitPCM(inputData);
+                            this.ws.send(buffer);
+                        }
                     }
                 }
-            }
-        };
+            };
 
-        // ── Step 6: Camera frames (every 2s for vision) ──
-        this.startCameraCapture();
+            // ── Step 6: Camera frames (every 2s for vision) ──
+            this.startCameraCapture();
 
-        return analyser;
+            return analyser;
+        } catch (error) {
+            this.teardownConnectionState(true);
+            throw error;
+        }
     }
 
     // ─── Camera Frame & Vision Context Capture ────────────────
@@ -414,6 +424,7 @@ export class ZenLiveSession {
 
     private handleConnectionLoss(type: string, event?: any) {
         if (this.isManuallyClosed) return;
+        this.teardownConnectionState(false);
 
         if (this.reconnectAttempts < this.MAX_RETRIES) {
             this.reconnectAttempts++;
@@ -424,8 +435,8 @@ export class ZenLiveSession {
                 `Thử lại lần ${this.reconnectAttempts}...`,
                 true
             );
-            this.ws = null;
-            setTimeout(() => {
+            this.clearReconnectTimer();
+            this.reconnectTimer = setTimeout(() => {
                 if (this.isManuallyClosed) return;
                 this.connect(true).catch((e) =>
                     console.error("Reconnect failed", e)
@@ -509,7 +520,19 @@ export class ZenLiveSession {
     // ─── Disconnect ──────────────────────────────────────────
     disconnect(reason?: string) {
         this.isManuallyClosed = true;
+        this.teardownConnectionState(true);
+        this.onDisconnectCallback(reason, false);
+    }
 
+    private clearReconnectTimer() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+    }
+
+    private teardownConnectionState(closeSocket: boolean) {
+        this.clearReconnectTimer();
         window.removeEventListener(
             "online",
             this.boundHandleNetworkRecovery
@@ -519,7 +542,11 @@ export class ZenLiveSession {
             this.boundHandleNetworkOffline
         );
 
-        if (this.idleTimer) clearTimeout(this.idleTimer);
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
+
         this.interruptPlayback();
         this.isAiSpeaking = false;
         this.stopCameraCapture();
@@ -531,11 +558,25 @@ export class ZenLiveSession {
             } catch { }
             this.workletNode = null;
         }
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
+
+        if (this.inputSource) {
+            try {
+                this.inputSource.disconnect();
+            } catch { }
+            this.inputSource = null;
         }
-        this.onDisconnectCallback(reason, false);
+
+        if (this.ws) {
+            const socket = this.ws;
+            this.ws = null;
+            socket.onclose = null;
+            socket.onerror = null;
+            if (closeSocket && socket.readyState < WebSocket.CLOSING) {
+                try {
+                    socket.close();
+                } catch { }
+            }
+        }
     }
 }
 

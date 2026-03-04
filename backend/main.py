@@ -18,7 +18,7 @@ from typing import Any, Deque, Dict, Optional, Tuple
 from google import genai
 from google.genai import types
 from google.cloud import firestore, pubsub_v1, storage
-from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
@@ -74,10 +74,12 @@ FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", 
 FIREBASE_SERVICE_ACCOUNT_FILE = os.environ.get("FIREBASE_SERVICE_ACCOUNT_FILE", "")
 
 MAX_WS_FRAME_BYTES = int(os.environ.get("MAX_WS_FRAME_BYTES", str(1024 * 1024)))
-MAX_MESSAGES_PER_MINUTE = int(os.environ.get("MAX_MESSAGES_PER_MINUTE", "240"))
+MAX_CONTROL_MESSAGES_PER_MINUTE = int(os.environ.get("MAX_MESSAGES_PER_MINUTE", "240"))
+MAX_AUDIO_FRAMES_PER_MINUTE = int(os.environ.get("MAX_AUDIO_FRAMES_PER_MINUTE", "2400"))
 MAX_BYTES_PER_MINUTE = int(os.environ.get("MAX_BYTES_PER_MINUTE", str(5 * 1024 * 1024)))
 MAX_CONNECTIONS_PER_IP = int(os.environ.get("MAX_CONNECTIONS_PER_IP", "3"))
 MAX_SESSION_SECONDS = int(os.environ.get("MAX_SESSION_SECONDS", "1800"))
+MAX_AUTH_REQUESTS_PER_MINUTE = int(os.environ.get("MAX_AUTH_REQUESTS_PER_MINUTE", "30"))
 RATE_WINDOW_SECONDS = 60
 
 REDIS_URL = os.environ.get("REDIS_URL", "").strip()
@@ -109,7 +111,8 @@ app.add_middleware(
 
 # In-memory connection + rate controls (per instance)
 _ip_connection_counts: Dict[str, int] = defaultdict(int)
-_ip_rate_windows: Dict[str, Deque[Tuple[float, int]]] = defaultdict(deque)
+_ip_rate_windows: Dict[str, Deque[Tuple[float, int, bool]]] = defaultdict(deque)
+_auth_rate_windows: Dict[str, Deque[float]] = defaultdict(deque)
 _rate_lock = asyncio.Lock()
 redis_client = None
 firebase_app = None
@@ -243,6 +246,16 @@ def _is_origin_allowed(origin: Optional[str]) -> bool:
     normalized_origin = origin.rstrip("/")
     allowed = {allowed_origin.rstrip("/") for allowed_origin in ALLOWED_ORIGINS}
     return normalized_origin in allowed
+
+
+def _extract_client_ip(forwarded_for: Optional[str], fallback_ip: Optional[str]) -> str:
+    if forwarded_for:
+        first_hop = forwarded_for.split(",")[0].strip()
+        if first_hop:
+            return first_hop
+    if fallback_ip:
+        return fallback_ip
+    return "unknown"
 
 
 def _verify_ws_token(token: Optional[str]) -> tuple[bool, str]:
@@ -419,25 +432,31 @@ async def _release_ip_slot(ip: str):
                 _ip_rate_windows.pop(ip, None)
 
 
-async def _track_inbound_message(ip: str, payload_size: int) -> bool:
+async def _track_inbound_message(ip: str, payload_size: int, is_audio_frame: bool = False) -> bool:
     if redis_client is not None:
         bucket = int(time.time() // RATE_WINDOW_SECONDS)
-        msg_key = f"{REDIS_KEY_PREFIX}:rate:msg:{ip}:{bucket}"
+        count_key = (
+            f"{REDIS_KEY_PREFIX}:rate:audio:{ip}:{bucket}"
+            if is_audio_frame
+            else f"{REDIS_KEY_PREFIX}:rate:control:{ip}:{bucket}"
+        )
         byte_key = f"{REDIS_KEY_PREFIX}:rate:bytes:{ip}:{bucket}"
         ttl = RATE_WINDOW_SECONDS + 5
 
         try:
             async with redis_client.pipeline(transaction=True) as pipe:
-                pipe.incr(msg_key, 1)
-                pipe.expire(msg_key, ttl)
+                pipe.incr(count_key, 1)
+                pipe.expire(count_key, ttl)
                 pipe.incrby(byte_key, payload_size)
                 pipe.expire(byte_key, ttl)
                 results = await pipe.execute()
 
-            message_count = int(results[0])
+            frame_or_message_count = int(results[0])
             total_bytes = int(results[2])
 
-            if message_count > MAX_MESSAGES_PER_MINUTE:
+            if is_audio_frame and frame_or_message_count > MAX_AUDIO_FRAMES_PER_MINUTE:
+                return False
+            if (not is_audio_frame) and frame_or_message_count > MAX_CONTROL_MESSAGES_PER_MINUTE:
                 return False
             if total_bytes > MAX_BYTES_PER_MINUTE:
                 return False
@@ -445,6 +464,10 @@ async def _track_inbound_message(ip: str, payload_size: int) -> bool:
         except Exception as exc:
             logger.warning(f"[RateLimit] Redis rate-check failed, using local limiter: {exc}")
 
+    return await _track_inbound_message_local(ip, payload_size, is_audio_frame=is_audio_frame)
+
+
+async def _track_inbound_message_local(ip: str, payload_size: int, is_audio_frame: bool) -> bool:
     now = time.monotonic()
 
     async with _rate_lock:
@@ -452,15 +475,44 @@ async def _track_inbound_message(ip: str, payload_size: int) -> bool:
         while window and (now - window[0][0]) > RATE_WINDOW_SECONDS:
             window.popleft()
 
-        message_count = len(window)
-        total_bytes = sum(size for _, size in window)
+        control_count = sum(1 for _, _, is_audio in window if not is_audio)
+        audio_count = sum(1 for _, _, is_audio in window if is_audio)
+        total_bytes = sum(size for _, size, _ in window)
 
-        if message_count >= MAX_MESSAGES_PER_MINUTE:
+        if is_audio_frame and audio_count >= MAX_AUDIO_FRAMES_PER_MINUTE:
+            return False
+        if (not is_audio_frame) and control_count >= MAX_CONTROL_MESSAGES_PER_MINUTE:
             return False
         if total_bytes + payload_size > MAX_BYTES_PER_MINUTE:
             return False
 
-        window.append((now, payload_size))
+        window.append((now, payload_size, is_audio_frame))
+        return True
+
+
+async def _track_auth_request(ip: str) -> bool:
+    if redis_client is not None:
+        bucket = int(time.time() // RATE_WINDOW_SECONDS)
+        key = f"{REDIS_KEY_PREFIX}:rate:auth:{ip}:{bucket}"
+        ttl = RATE_WINDOW_SECONDS + 5
+        try:
+            async with redis_client.pipeline(transaction=True) as pipe:
+                pipe.incr(key, 1)
+                pipe.expire(key, ttl)
+                results = await pipe.execute()
+            count = int(results[0])
+            return count <= MAX_AUTH_REQUESTS_PER_MINUTE
+        except Exception as exc:
+            logger.warning(f"[RateLimit] Redis auth-check failed, using local limiter: {exc}")
+
+    now = time.monotonic()
+    async with _rate_lock:
+        window = _auth_rate_windows[ip]
+        while window and (now - window[0]) > RATE_WINDOW_SECONDS:
+            window.popleft()
+        if len(window) >= MAX_AUTH_REQUESTS_PER_MINUTE:
+            return False
+        window.append(now)
         return True
 
 
@@ -671,8 +723,16 @@ async def _send_text_to_model(live_session, text: str, turn_complete: bool = Fal
 
 @app.post("/auth/ws-token", response_model=WsTokenIssueResponse)
 async def issue_ws_token(
+    request: Request,
     authorization: Optional[str] = Header(default=None),
 ):
+    forwarded_for = request.headers.get("x-forwarded-for")
+    fallback_ip = request.client.host if request.client else None
+    client_ip = _extract_client_ip(forwarded_for, fallback_ip)
+
+    if not await _track_auth_request(client_ip):
+        raise HTTPException(status_code=429, detail="Too many auth requests")
+
     if not WS_JWT_SECRET:
         raise HTTPException(status_code=503, detail="WS_JWT_SECRET is not configured")
 
@@ -711,7 +771,9 @@ async def live_stream(websocket: WebSocket, token: Optional[str] = Query(default
     Gemini responses (audio + tool calls) are forwarded back to frontend.
     """
     origin = websocket.headers.get("origin")
-    client_ip = websocket.client.host if websocket.client else "unknown"
+    forwarded_for = websocket.headers.get("x-forwarded-for")
+    fallback_ip = websocket.client.host if websocket.client else None
+    client_ip = _extract_client_ip(forwarded_for, fallback_ip)
 
     if not _is_origin_allowed(origin):
         logger.warning(f"[WS] Rejected origin={origin} ip={client_ip}")
@@ -766,7 +828,12 @@ async def live_stream(websocket: WebSocket, token: Optional[str] = Query(default
                             await websocket.close(code=1009, reason="Frame too large")
                             break
 
-                        if raw_size and not await _track_inbound_message(client_ip, raw_size):
+                        is_audio_frame = message.get("bytes") is not None
+                        if raw_size and not await _track_inbound_message(
+                            client_ip,
+                            raw_size,
+                            is_audio_frame=is_audio_frame,
+                        ):
                             await websocket.close(code=1008, reason="Rate limit exceeded")
                             break
 
@@ -923,8 +990,10 @@ def health():
             "auth_provider": AUTH_PROVIDER,
             "origins": ALLOWED_ORIGINS,
             "max_connections_per_ip": MAX_CONNECTIONS_PER_IP,
-            "max_messages_per_minute": MAX_MESSAGES_PER_MINUTE,
+            "max_control_messages_per_minute": MAX_CONTROL_MESSAGES_PER_MINUTE,
+            "max_audio_frames_per_minute": MAX_AUDIO_FRAMES_PER_MINUTE,
             "max_bytes_per_minute": MAX_BYTES_PER_MINUTE,
+            "max_auth_requests_per_minute": MAX_AUTH_REQUESTS_PER_MINUTE,
             "max_session_seconds": MAX_SESSION_SECONDS,
             "distributed_rate_limit": redis_client is not None,
         },

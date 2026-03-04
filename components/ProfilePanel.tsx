@@ -14,7 +14,7 @@ export const ProfilePanel: React.FC = () => {
         if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
             haptic('warn');
             try {
-                if (!user?.isGuest) {
+                if (!user?.isGuest && auth) {
                     await signOut(auth);
                 }
                 setUser(null);

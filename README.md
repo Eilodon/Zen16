@@ -83,7 +83,7 @@ npm install
 # Set backend URL (after deploying, or use localhost)
 echo "VITE_BACKEND_URL=ws://localhost:8080" > .env.local
 
-# Firebase web config (required for automatic WS token flow)
+# Firebase web config (optional, required only if you want built-in login and WS token issuer flow)
 echo "VITE_FIREBASE_API_KEY=<firebase-api-key>" >> .env.local
 echo "VITE_FIREBASE_AUTH_DOMAIN=<project>.firebaseapp.com" >> .env.local
 echo "VITE_FIREBASE_PROJECT_ID=<project-id>" >> .env.local
@@ -113,6 +113,9 @@ export ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 export AUTH_PROVIDER="firebase"
 # Optional distributed limiter in local:
 # export REDIS_URL="redis://127.0.0.1:6379/0"
+# Optional limiter tuning for realtime voice:
+# export MAX_AUDIO_FRAMES_PER_MINUTE="2400"
+# export MAX_AUTH_REQUESTS_PER_MINUTE="30"
 
 # Run
 uvicorn main:app --host 0.0.0.0 --port 8080

@@ -11,21 +11,6 @@ interface Props {
   isEmergency?: boolean;
 }
 
-// Global helper for emergency sound (Low grounding hum)
-export const playEmergencyAlert = async () => {
-  await getSharedAudioContext();
-  await Tone.start();
-  
-  const osc = new Tone.Oscillator(150, "sine").toDestination();
-  const lfo = new Tone.LFO(2, 140, 160).connect(osc.frequency); // Gentle vibrato
-  
-  osc.volume.value = -10;
-  lfo.start();
-  osc.start();
-  osc.stop("+3"); // Play for 3 seconds
-  lfo.stop("+3");
-};
-
 function AudioEngine({ 
   emotion, 
   breathing, 

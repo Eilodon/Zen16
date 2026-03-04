@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { AlertCircle, Phone, HeartHandshake } from 'lucide-react';
-import { playEmergencyAlert } from './AudioEngine';
+import { playEmergencyAlert } from '../services/emergencyAudio';
 
 interface Props {
   isActive: boolean;

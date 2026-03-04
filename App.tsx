@@ -106,6 +106,8 @@ export default function App() {
 
   // Sync Firebase Auth with UI Store
   useEffect(() => {
+    if (!auth) return;
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       const { user, setUser } = useUIStore.getState();
 
@@ -125,7 +127,7 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   // Auto-rotate idle teachings every 8 seconds
   useEffect(() => {
