@@ -1,5 +1,4 @@
-import { ZenResponse, VisionAnalysis, CulturalMode, Language } from "../types";
-import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision';
+import { ZenResponse, CulturalMode, Language } from "../types";
 import { getRandomTeaching, BUDDHIST_TEACHINGS } from "../data/buddhistTeachings";
 import {
     AUDIO_WORKLET_CODE,
@@ -109,7 +108,7 @@ export class ZenLiveSession {
     private cameraInterval: ReturnType<typeof setInterval> | null = null;
     private videoElement: HTMLVideoElement | null = null;
     private canvas: HTMLCanvasElement | null = null;
-    private faceLandmarker: FaceLandmarker | null = null;
+    private faceLandmarker: any | null = null;
     private blinkHistory: number[] = [];
     private lastContextSend = 0;
     private lastVisionFrameSend = 0;
@@ -329,6 +328,7 @@ export class ZenLiveSession {
     // ─── Camera Frame & Vision Context Capture ────────────────
     private async initFaceLandmarker() {
         try {
+            const { FilesetResolver, FaceLandmarker } = await import('@mediapipe/tasks-vision');
             const vision = await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
             );
@@ -641,19 +641,3 @@ export class ZenLiveSession {
         }
     }
 }
-
-// ─── Vision Analysis (delegates to backend) ──────────────────
-// DEPRECATED/PLACEHOLDER: Vision analysis is now handled natively by Gemini Live API
-export const analyzeEnvironment = async (
-    apiKey: string,
-    base64Image: string
-): Promise<VisionAnalysis> => {
-    // Placeholder — actual vision analysis happens in Gemini Live session
-    return {
-        buddhist_score: 0.8,
-        modern_score: 0.2,
-        natural_score: 0.5,
-        detected_items: ["altar", "incense"],
-        mode: "VN",
-    };
-};

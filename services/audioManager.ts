@@ -1,6 +1,3 @@
-
-import * as ort from 'onnxruntime-web';
-
 // --- AUDIO MANAGER & UTILITIES ---
 
 export const AUDIO_WORKLET_CODE = `
@@ -73,7 +70,6 @@ export const base64EncodeAudio = (float32Array: Float32Array): string => {
  * 3. [FUTURE] Silero ONNX (Placeholder for when model caching is robust).
  */
 export class RobustVoiceDetector {
-  private session: any = null;
   private noiseGate = 0.005; 
   private holdFrameCount = 5;
   private currentHold = 0;
@@ -88,15 +84,6 @@ export class RobustVoiceDetector {
     this.sampleRate = sampleRate;
     // Initialize Bandpass Filter Coeffs (Approx 300Hz High Pass)
     this.calculateFilterCoeffs();
-    this.initONNX();
-  }
-
-  private async initONNX() {
-    try {
-        // Placeholder for ONNX VAD
-    } catch (e) {
-        console.warn("VAD Model load failed, using DSP fallback", e);
-    }
   }
 
   private calculateFilterCoeffs() {

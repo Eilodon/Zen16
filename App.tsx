@@ -5,16 +5,10 @@ import { VoiceButton } from './components/VoiceButton';
 import { ZenCard } from './components/ZenCard';
 import { Snackbar } from './components/Snackbar';
 import { CameraScan } from './components/CameraScan';
-import { ReasoningPanel } from './components/ReasoningPanel';
 import { BottomSheet } from './components/PandoraParts';
-import { SettingsSheet } from './components/SettingsSheet';
 const AudioEngine = React.lazy(() => import('./components/AudioEngine'));
-import { BreathingCircle } from './components/BreathingCircle';
-import { EmergencyProtocol } from './components/EmergencyProtocol';
-import { HistoryPanel } from './components/HistoryPanel';
 import { OnboardingFlow } from './components/OnboardingFlow';
 import { ProfilePanel } from './components/ProfilePanel';
-import { StressIndicator } from './components/StressIndicator';
 import { LiveStatusBar } from './components/LiveStatusBar';
 import { MicroPractices } from './components/MicroPractices';
 import { InputDock } from './components/InputDock';
@@ -32,6 +26,12 @@ import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const OrbViz = React.lazy(() => import('./components/OrbViz'));
+const BreathingCircle = React.lazy(() => import('./components/BreathingCircle'));
+const EmergencyProtocol = React.lazy(() => import('./components/EmergencyProtocol'));
+const HistoryPanel = React.lazy(() => import('./components/HistoryPanel'));
+const StressIndicator = React.lazy(() => import('./components/StressIndicator'));
+const ReasoningPanel = React.lazy(() => import('./components/ReasoningPanel'));
+const SettingsSheet = React.lazy(() => import('./components/SettingsSheet'));
 
 export default function App() {
   // --- Global State ---
@@ -76,6 +76,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStressSheetOpen, setIsStressSheetOpen] = useState(false);
   const [currentAmbient, setCurrentAmbient] = useState<string>('silence');
+  const [shouldLoadOrb, setShouldLoadOrb] = useState(false);
 
   // Audio Viz State
   const [frequencyData, setFrequencyData] = useState<Uint8Array>(new Uint8Array(64));
@@ -285,6 +286,32 @@ export default function App() {
     setSnackbar({ text: uiText.newSession, kind: 'info' });
   };
 
+  useEffect(() => {
+    if (!isOnboardingComplete) {
+      setShouldLoadOrb(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadOrb = () => {
+      if (!cancelled) setShouldLoadOrb(true);
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = (window as any).requestIdleCallback(loadOrb, { timeout: 1200 });
+      return () => {
+        cancelled = true;
+        (window as any).cancelIdleCallback?.(idleId);
+      };
+    }
+
+    const timer = window.setTimeout(loadOrb, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isOnboardingComplete]);
+
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden select-none"
       style={{ fontFamily: 'var(--font-body)', color: 'var(--zen-ink, #1c1917)' }}>
@@ -297,13 +324,17 @@ export default function App() {
       )}
 
       <div className="absolute inset-0 z-0">
-        <Suspense fallback={<div className="absolute inset-0" style={{ background: 'var(--bg-gradient)' }} />}>
-          <OrbViz
-            analyser={analyserRef.current}
-            emotion={zenData?.emotion || 'neutral'}
-            frequencyData={frequencyData}
-          />
-        </Suspense>
+        {shouldLoadOrb ? (
+          <Suspense fallback={<div className="absolute inset-0" style={{ background: 'var(--bg-gradient)' }} />}>
+            <OrbViz
+              analyser={analyserRef.current}
+              emotion={zenData?.emotion || 'neutral'}
+              frequencyData={frequencyData}
+            />
+          </Suspense>
+        ) : (
+          <div className="absolute inset-0" style={{ background: 'var(--bg-gradient)' }} />
+        )}
       </div>
 
       <Suspense fallback={null}>
@@ -317,20 +348,24 @@ export default function App() {
       </Suspense>
 
       {showBreathing && (
-        <BreathingCircle
-          type={zenData?.breathing || '4-7-8'}
-          isActive={showBreathing}
-          onComplete={() => setShowBreathing(false)}
-        />
+        <Suspense fallback={null}>
+          <BreathingCircle
+            type={zenData?.breathing || '4-7-8'}
+            isActive={showBreathing}
+            onComplete={() => setShowBreathing(false)}
+          />
+        </Suspense>
       )}
 
-      <EmergencyProtocol
-        isActive={emergencyActive}
-        onComplete={() => {
-          setEmergencyActive(false);
-          disconnect();
-        }}
-      />
+      <Suspense fallback={null}>
+        <EmergencyProtocol
+          isActive={emergencyActive}
+          onComplete={() => {
+            setEmergencyActive(false);
+            disconnect();
+          }}
+        />
+      </Suspense>
 
       {/* --- LAYER 1: Top Floating Bar --- */}
       <div className="absolute top-0 left-0 right-0 p-4 pt-6 z-50 pointer-events-none flex justify-between items-start">
@@ -393,7 +428,9 @@ export default function App() {
           )}
           {/* History Button with badge */}
           <div className="relative">
-            <HistoryPanel history={history} onClear={() => setHistory([])} />
+            <Suspense fallback={<div className="w-9 h-9" />}>
+              <HistoryPanel history={history} onClear={() => setHistory([])} />
+            </Suspense>
             {history.length > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[7px] font-bold flex items-center justify-center text-white"
                 style={{ background: '#f97316', boxShadow: '0 1px 4px rgba(249,115,22,0.3)' }}>
@@ -427,11 +464,13 @@ export default function App() {
           <div className="absolute top-36 left-4 z-40 pointer-events-none hidden lg:block animate-fadeInUp"
             style={{ animationDelay: '0.3s' }}>
             <div className="pointer-events-auto">
-              <StressIndicator
-                data={zenData}
-                isConnected={connectionState === 'connected'}
-                isSpeaking={status === 'speaking'}
-              />
+              <Suspense fallback={null}>
+                <StressIndicator
+                  data={zenData}
+                  isConnected={connectionState === 'connected'}
+                  isSpeaking={status === 'speaking'}
+                />
+              </Suspense>
             </div>
           </div>
           {/* Mobile: floating pill */}
@@ -639,7 +678,9 @@ export default function App() {
         onClose={() => setIsReasoningOpen(false)}
         title="Phân tích Tâm thức"
       >
-        {zenData && <ReasoningPanel data={zenData} onBack={() => setIsReasoningOpen(false)} />}
+        <Suspense fallback={null}>
+          {zenData && <ReasoningPanel data={zenData} onBack={() => setIsReasoningOpen(false)} />}
+        </Suspense>
       </BottomSheet>
 
       <BottomSheet
@@ -647,40 +688,42 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         title="Cài đặt"
       >
-        <SettingsSheet
-          language={language}
-          inputMode={inputMode}
-          culturalMode={culturalMode}
-          onLanguageChange={(lang) => {
-            setLanguage(lang);
-            setSnackbar({ text: `${uiText.language}: ${lang === 'vi' ? 'Tiếng Việt' : 'English'}`, kind: 'success' });
-            if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
-          }}
-          onInputModeChange={(mode) => {
-            disconnect();
-            setInputMode(mode);
-          }}
-          onCulturalModeChange={(mode) => {
-            setCulturalMode(mode);
-            setSnackbar({ text: `${uiText.mode}: ${mode}`, kind: 'success' });
-            if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
-          }}
-          onStartBreathing={(type) => {
-            setShowBreathing(true);
-            setIsSettingsOpen(false);
-            // Set breathing type — use existing zenData or create minimal stub
-            const breathingData: ZenResponse = zenData ? { ...zenData, breathing: type } : {
-              emotion: 'calm', wisdom_text: '', wisdom_english: '', user_transcript: '',
-              breathing: type, confidence: 1, reasoning_steps: ['Manual Breathing'],
-              quantum_metrics: { coherence: 0.8, entanglement: 0.5, presence: 0.9 },
-              awareness_stage: 'mindful' as const,
-              consciousness_dimensions: { contextual: 0.5, emotional: 0.5, cultural: 0.5, wisdom: 0.5, uncertainty: 0.5, relational: 0.5 },
-            };
-            setZenData(breathingData);
-          }}
-          onAmbientChange={(sound) => setCurrentAmbient(sound)}
-          currentAmbient={currentAmbient}
-        />
+        <Suspense fallback={null}>
+          <SettingsSheet
+            language={language}
+            inputMode={inputMode}
+            culturalMode={culturalMode}
+            onLanguageChange={(lang) => {
+              setLanguage(lang);
+              setSnackbar({ text: `${uiText.language}: ${lang === 'vi' ? 'Tiếng Việt' : 'English'}`, kind: 'success' });
+              if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
+            }}
+            onInputModeChange={(mode) => {
+              disconnect();
+              setInputMode(mode);
+            }}
+            onCulturalModeChange={(mode) => {
+              setCulturalMode(mode);
+              setSnackbar({ text: `${uiText.mode}: ${mode}`, kind: 'success' });
+              if (status !== 'idle') { disconnect(); setTimeout(() => connect(), 500); }
+            }}
+            onStartBreathing={(type) => {
+              setShowBreathing(true);
+              setIsSettingsOpen(false);
+              // Set breathing type — use existing zenData or create minimal stub
+              const breathingData: ZenResponse = zenData ? { ...zenData, breathing: type } : {
+                emotion: 'calm', wisdom_text: '', wisdom_english: '', user_transcript: '',
+                breathing: type, confidence: 1, reasoning_steps: ['Manual Breathing'],
+                quantum_metrics: { coherence: 0.8, entanglement: 0.5, presence: 0.9 },
+                awareness_stage: 'mindful' as const,
+                consciousness_dimensions: { contextual: 0.5, emotional: 0.5, cultural: 0.5, wisdom: 0.5, uncertainty: 0.5, relational: 0.5 },
+              };
+              setZenData(breathingData);
+            }}
+            onAmbientChange={(sound) => setCurrentAmbient(sound)}
+            currentAmbient={currentAmbient}
+          />
+        </Suspense>
       </BottomSheet>
 
       {/* StressIndicator Mobile Sheet */}
@@ -689,13 +732,15 @@ export default function App() {
         onClose={() => setIsStressSheetOpen(false)}
         title="Trạng thái Tâm thức"
       >
-        {zenData && (
-          <StressIndicator
-            data={zenData}
-            isConnected={connectionState === 'connected'}
-            isSpeaking={status === 'speaking'}
-          />
-        )}
+        <Suspense fallback={null}>
+          {zenData && (
+            <StressIndicator
+              data={zenData}
+              isConnected={connectionState === 'connected'}
+              isSpeaking={status === 'speaking'}
+            />
+          )}
+        </Suspense>
       </BottomSheet>
 
       {snackbar && (

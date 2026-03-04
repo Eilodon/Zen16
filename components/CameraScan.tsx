@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Check, Loader2, ScanEye } from 'lucide-react';
-import { analyzeEnvironment } from '../services/liveAgent';
+import { analyzeEnvironment } from '../services/visionAnalysis';
 import { CulturalMode } from '../types';
 import { useUIStore } from '../store/zenStore';
 import { usePermissions } from '../hooks/usePermissions';

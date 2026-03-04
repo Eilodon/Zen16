@@ -1,7 +1,6 @@
 
 import * as React from 'react';
-import { useRef, useCallback } from 'react';
-import { ZenLiveSession, sendZenTextQuery } from '../services/liveAgent';
+import { useRef } from 'react';
 import { ZenResponse } from '../types';
 import { haptic } from '../utils/designSystem';
 import { detectEmergency } from '../data/emergencyKeywords';
@@ -10,6 +9,11 @@ import { useUIStore, useZenStore } from '../store/zenStore';
 interface UseZenSessionProps {
   onEmergencyDetected: () => void;
   onError: (msg: string, type: 'error' | 'warn' | 'info') => void;
+}
+
+interface LiveSessionHandle {
+  connect: (isReconnect?: boolean) => Promise<AnalyserNode>;
+  disconnect: (reason?: string) => void;
 }
 
 export function useZenSession({
@@ -42,7 +46,7 @@ export function useZenSession({
       cannotProcess: "Unable to process the request.",
     }), [language]);
 
-  const liveSessionRef = useRef<ZenLiveSession | null>(null);
+  const liveSessionRef = useRef<LiveSessionHandle | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
 
   // Handle session disconnects & reconnects
@@ -102,13 +106,14 @@ export function useZenSession({
       // It must be done INSIDE ZenLiveSession.connect() after getUserMedia 
       // to ensure the permission prompt is triggered by the user gesture immediately.
 
+      const { ZenLiveSession } = await import('../services/liveAgent');
       liveSessionRef.current = new ZenLiveSession(
         culturalMode,
         language,
         handleStateChange,
         (active) => setStatus(active ? 'speaking' : 'listening'),
         handleDisconnect
-      );
+      ) as LiveSessionHandle;
 
       haptic('success');
       setStatus('listening');
@@ -173,6 +178,7 @@ export function useZenSession({
       setStatus('processing');
 
       const apiKey = "";
+      const { sendZenTextQuery } = await import('../services/liveAgent');
       const response = await sendZenTextQuery(apiKey, text, culturalMode, language);
 
       setZenData(response);
