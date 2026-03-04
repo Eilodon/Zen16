@@ -1,5 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import * as Tone from 'tone';
+import { haptic } from '../utils/designSystem';
 
 interface Props {
   type: '4-7-8' | 'box-breathing' | 'coherent-breathing' | 'none' | null;
@@ -12,6 +14,12 @@ export const BreathingCircle: React.FC<Props> = ({ type, isActive, onComplete })
   const [countdown, setCountdown] = useState(4);
   const [cycleCount, setCycleCount] = useState(0);
 
+  // Audio refs
+  const synthRef = useRef<Tone.Synth | null>(null);
+  const filterRef = useRef<Tone.Filter | null>(null);
+  const lfoRef = useRef<Tone.LFO | null>(null);
+  const isAudioReady = useRef(false);
+
   const timings = type === '4-7-8'
     ? { inhale: 4, hold: 7, exhale: 8, rest: 0 }
     : type === 'coherent-breathing'
@@ -23,8 +31,48 @@ export const BreathingCircle: React.FC<Props> = ({ type, isActive, onComplete })
       setPhase('inhale');
       setCycleCount(0);
       setCountdown(4);
+      // Fade out and stop audio
+      if (synthRef.current) {
+        synthRef.current.volume.rampTo(-Infinity, 1);
+        setTimeout(() => {
+          synthRef.current?.triggerRelease();
+        }, 1000);
+      }
       return;
     }
+
+    // Initialize Tone.js audio engine
+    const initAudio = async () => {
+      if (!isAudioReady.current) {
+        await Tone.start();
+
+        // Singing bowl / binaural drone synth
+        const synth = new Tone.Synth({
+          oscillator: { type: 'sine' },
+          envelope: { attack: 2, decay: 1, sustain: 1, release: 3 }
+        });
+
+        const filter = new Tone.Filter(300, 'lowpass');
+        const lfo = new Tone.LFO('0.1hz', 200, 600).connect(filter.frequency);
+        const reverb = new Tone.Reverb({ decay: 4, preDelay: 0.1 }).toDestination();
+
+        synth.chain(filter, reverb);
+        synth.volume.value = -Infinity;
+
+        synthRef.current = synth;
+        filterRef.current = filter;
+        lfoRef.current = lfo;
+        isAudioReady.current = true;
+
+        // Start drone
+        synth.triggerAttack(136.1); // Om frequency (C#3)
+        lfo.start();
+      }
+      // Fade in gently
+      synthRef.current?.volume.rampTo(-12, 2);
+    };
+
+    initAudio();
 
     setPhase('inhale');
     setCountdown(timings.inhale);
@@ -51,6 +99,26 @@ export const BreathingCircle: React.FC<Props> = ({ type, isActive, onComplete })
 
           currentPhase = nextPhase;
           setPhase(nextPhase);
+
+          // Modulate Tone.js based on phase
+          if (synthRef.current && filterRef.current) {
+            const t = Tone.now();
+            if (nextPhase === 'inhale') {
+              haptic('breathInhale');
+              synthRef.current.frequency.rampTo(144, timings.inhale, t); // Pitch up slightly
+              synthRef.current.volume.rampTo(-8, timings.inhale, t);
+              filterRef.current.frequency.rampTo(600, timings.inhale, t);
+            } else if (nextPhase === 'exhale') {
+              haptic('breathExhale');
+              synthRef.current.frequency.rampTo(136.1, timings.exhale, t); // Pitch down to root
+              synthRef.current.volume.rampTo(-14, timings.exhale, t);
+              filterRef.current.frequency.rampTo(250, timings.exhale, t);
+            } else if (nextPhase === 'hold' || nextPhase === 'rest') {
+              haptic('breathHold');
+              // Hold steady
+            }
+          }
+
           return timings[nextPhase];
         }
         return prev - 1;
@@ -67,6 +135,15 @@ export const BreathingCircle: React.FC<Props> = ({ type, isActive, onComplete })
     return () => {
       clearInterval(interval);
       clearTimeout(completeTimer);
+      if (synthRef.current) {
+        synthRef.current.volume.rampTo(-Infinity, 1);
+        setTimeout(() => {
+          synthRef.current?.dispose();
+          filterRef.current?.dispose();
+          lfoRef.current?.dispose();
+          isAudioReady.current = false;
+        }, 1000);
+      }
     };
   }, [isActive, type]);
 

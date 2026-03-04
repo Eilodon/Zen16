@@ -9,22 +9,22 @@ import { useEffect, useState, useRef } from "react";
 
 export const TOKENS = {
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, '3xl': 40, '4xl': 48 },
-  radius: { 
-    chip: 12, 
-    card: 28, 
-    cardLg: 36, 
-    button: 16, 
-    round: 999 
+  radius: {
+    chip: 12,
+    card: 28,
+    cardLg: 36,
+    button: 16,
+    round: 999
   },
-  elevation: { 
-    chip: "0 1px 3px rgba(0,0,0,0.06)", 
+  elevation: {
+    chip: "0 1px 3px rgba(0,0,0,0.06)",
     card: "var(--glass-shadow)",
     cardElevated: "var(--glass-shadow-elevated)",
     float: "0 12px 48px rgba(0,0,0,0.12)",
     saffron: "var(--glass-shadow-saffron)",
     glow: (color: string, opacity = 0.25) => `0 0 24px rgba(${color}, ${opacity})`,
   },
-  typography: { 
+  typography: {
     label: { size: 12, weight: 600, family: 'var(--font-body)' },
     body: { size: 15, weight: 400, family: 'var(--font-body)' },
     bodyLg: { size: 17, weight: 400, family: 'var(--font-body)' },
@@ -41,8 +41,8 @@ export const TOKENS = {
     inOut: 'var(--ease-in-out)',
     bounce: 'var(--ease-bounce)',
   },
-  materials: { 
-    glassLight: 'var(--glass-clear)', 
+  materials: {
+    glassLight: 'var(--glass-clear)',
     glassDark: 'var(--glass-frosted)',
     glassSubtle: 'var(--glass-subtle)',
     borderLight: 'var(--glass-border)',
@@ -92,16 +92,19 @@ export const EMOTION_ACCENT: Record<string, string> = {
 };
 
 // ----- Haptics util -----
-export function haptic(kind: 'success' | 'warn' | 'error' | 'selection' | 'light' = 'selection') {
+export function haptic(kind: 'success' | 'warn' | 'error' | 'selection' | 'light' | 'breathInhale' | 'breathExhale' | 'breathHold' = 'selection') {
   try {
     if (!('vibrate' in navigator)) return;
-    
+
     switch (kind) {
       case 'success': navigator.vibrate([10, 30, 10]); break;
       case 'warn': navigator.vibrate([15, 50, 15]); break;
       case 'error': navigator.vibrate([50, 100, 50]); break;
       case 'light': navigator.vibrate(5); break;
       case 'selection': navigator.vibrate(10); break;
+      case 'breathInhale': navigator.vibrate([15, 100, 15, 100, 15]); break; // Rising pulse
+      case 'breathExhale': navigator.vibrate([30, 200, 10]); break;        // Long fade
+      case 'breathHold': navigator.vibrate(5); break;                      // Tiny tick
     }
   } catch (e) {
     // Ignore haptic errors
@@ -109,21 +112,21 @@ export function haptic(kind: 'success' | 'warn' | 'error' | 'selection' | 'light
 }
 
 // ----- Long Press util -----
-export function useLongPress(callback = () => {}, ms = 500) {
+export function useLongPress(callback = () => { }, ms = 500) {
   const timerRef = useRef<any>(null);
-  
-  const start = () => { 
+
+  const start = () => {
     timerRef.current = setTimeout(() => {
       haptic('success');
       callback();
-    }, ms); 
+    }, ms);
   };
-  
-  const clear = () => { 
-    if (timerRef.current) { 
-      clearTimeout(timerRef.current); 
-      timerRef.current = null; 
-    } 
+
+  const clear = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
   };
 
   return {
@@ -144,15 +147,15 @@ export function useStreamingText(content: string, isGenerating: boolean, speed =
       setStream("");
       return;
     }
-    
+
     if (!isGenerating && stream === content) return;
 
     setStream("");
     setIsDone(false);
-    
+
     let i = 0;
-    const textToType = content; 
-    
+    const textToType = content;
+
     const id = setInterval(() => {
       setStream(s => {
         const next = textToType.slice(0, i + 1);

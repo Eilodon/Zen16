@@ -1,11 +1,13 @@
 import { ZenResponse, VisionAnalysis, CulturalMode, Language } from "../types";
+import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision';
 import { getRandomTeaching, BUDDHIST_TEACHINGS } from "../data/buddhistTeachings";
 import {
     AUDIO_WORKLET_CODE,
-    base64EncodeAudio,
+    floatTo16BitPCM,
     RobustVoiceDetector,
 } from "./audioManager";
 import { getSharedAudioContext } from "./audioContext";
+import { buildWsUrlWithToken, getWebSocketAccessToken } from "./wsAuth";
 
 // ─── Configuration ───────────────────────────────────────────
 // Cloud Run URL — update after deployment
@@ -99,11 +101,14 @@ export class ZenLiveSession {
     private reconnectAttempts = 0;
     private readonly MAX_RETRIES = 5;
 
-    // Camera
+    // Camera & Vision
     private videoStream: MediaStream | null = null;
     private cameraInterval: ReturnType<typeof setInterval> | null = null;
     private videoElement: HTMLVideoElement | null = null;
     private canvas: HTMLCanvasElement | null = null;
+    private faceLandmarker: FaceLandmarker | null = null;
+    private blinkHistory: number[] = [];
+    private lastContextSend = 0;
 
     // Idle timer
     private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -203,8 +208,13 @@ export class ZenLiveSession {
         const analyser = this.inputContext.createAnalyser();
         inputSource.connect(analyser);
 
-        // ── Step 4: Connect WebSocket to Cloud Run ──
-        this.ws = new WebSocket(WS_URL);
+        // ── Step 4.5: Init Face Landmarker (Background) ──
+        this.initFaceLandmarker();
+
+        // ── Step 5: Connect WebSocket to Cloud Run ──
+        const wsAccessToken = await getWebSocketAccessToken();
+        this.ws = new WebSocket(buildWsUrlWithToken(WS_URL, wsAccessToken));
+        this.ws.binaryType = "arraybuffer";
 
         this.ws.onopen = () => {
             console.log("[Zen16] WebSocket connected to backend");
@@ -212,19 +222,21 @@ export class ZenLiveSession {
             this.onDisconnectCallback(undefined, false);
         };
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = async (event) => {
             this.resetIdleTimer();
+            if (event.data instanceof ArrayBuffer) {
+                // Incoming binary audio from Gemini
+                this.isAiSpeaking = true;
+                this.onAudioActivity(true);
+                const audioData = this.decodeInt16ToFloat32(event.data);
+                this.scheduleAudioChunk(audioData);
+                return;
+            }
+
             try {
-                const msg = JSON.parse(event.data);
+                const msg = JSON.parse(event.data as string);
 
                 switch (msg.type) {
-                    case "audio":
-                        this.isAiSpeaking = true;
-                        this.onAudioActivity(true);
-                        const audioData = this.decodeBase64ToFloat32(msg.data);
-                        this.scheduleAudioChunk(audioData);
-                        break;
-
                     case "zen_state":
                         // Tool call result from Gemini → update UI
                         this.onStateChange(msg.data);
@@ -274,10 +286,8 @@ export class ZenLiveSession {
                     }
 
                     if (this.ws?.readyState === WebSocket.OPEN) {
-                        const b64 = base64EncodeAudio(inputData);
-                        this.ws.send(
-                            JSON.stringify({ type: "audio", data: b64 })
-                        );
+                        const buffer = floatTo16BitPCM(inputData);
+                        this.ws.send(buffer);
                     }
                 }
             }
@@ -289,7 +299,27 @@ export class ZenLiveSession {
         return analyser;
     }
 
-    // ─── Camera Frame Capture ────────────────────────────────
+    // ─── Camera Frame & Vision Context Capture ────────────────
+    private async initFaceLandmarker() {
+        try {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                    delegate: "GPU"
+                },
+                outputFaceBlendshapes: true,
+                runningMode: "VIDEO",
+                numFaces: 1
+            });
+            console.log("[Zen16] FaceLandmarker initialized");
+        } catch (e) {
+            console.warn("Failed to init FaceLandmarker", e);
+        }
+    }
+
     private startCameraCapture() {
         if (!this.videoStream) return;
         const videoTrack = this.videoStream.getVideoTracks()[0];
@@ -300,31 +330,51 @@ export class ZenLiveSession {
         this.videoElement.muted = true;
         this.videoElement.play();
 
-        this.canvas = document.createElement("canvas");
-        this.canvas.width = 320;
-        this.canvas.height = 240;
-
         this.cameraInterval = setInterval(() => {
-            if (
-                !this.canvas ||
-                !this.videoElement ||
-                this.ws?.readyState !== WebSocket.OPEN
-            )
-                return;
-            const ctx = this.canvas.getContext("2d");
-            if (!ctx) return;
-            ctx.drawImage(
-                this.videoElement,
-                0,
-                0,
-                this.canvas.width,
-                this.canvas.height
-            );
-            // Convert to JPEG base64 and send
-            const dataUrl = this.canvas.toDataURL("image/jpeg", 0.6);
-            const b64 = dataUrl.split(",")[1];
-            this.ws!.send(JSON.stringify({ type: "image", data: b64 }));
-        }, 2000); // Every 2 seconds
+            if (!this.videoElement || !this.faceLandmarker) return;
+
+            // 1. Process local vision tracking
+            if (this.videoElement.videoWidth > 0) {
+                const results = this.faceLandmarker.detectForVideo(this.videoElement, performance.now());
+                if (results.faceBlendshapes && results.faceBlendshapes.length > 0) {
+                    const shapes = results.faceBlendshapes[0].categories;
+                    const blinkLeft = shapes.find(s => s.categoryName === 'eyeBlinkLeft')?.score || 0;
+                    const blinkRight = shapes.find(s => s.categoryName === 'eyeBlinkRight')?.score || 0;
+
+                    if (blinkLeft > 0.4 && blinkRight > 0.4) {
+                        this.blinkHistory.push(Date.now());
+                        // Keep only last 60 seconds
+                        this.blinkHistory = this.blinkHistory.filter(t => Date.now() - t < 60000);
+                    }
+
+                    // Simple posture check via landmarks
+                    // Nose (1), Top Head (10), Chin (152)
+                    if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                        const lm = results.faceLandmarks[0];
+                        // If nose is closer to chin than top head in Y axis, looking down
+                        // This is a naive heuristic
+                        const lookingDown = lm[1].y > 0.7; // Lower on the screen
+
+                        // Send telemetry to Gemini if significant
+                        const now = Date.now();
+                        if (now - this.lastContextSend > 10000 && this.ws?.readyState === WebSocket.OPEN) { // Throttle 10s
+                            let contextMsg = "";
+                            const bpm = this.blinkHistory.length;
+                            if (bpm > 25) contextMsg += `[SYSTEM: User is blinking rapidly (${bpm} bpm). High cognitive load/anxiety possible.] `;
+                            if (lookingDown) contextMsg += `[SYSTEM: User is looking down heavily. Suggest compassion/lifting spirits.] `;
+
+                            if (contextMsg) {
+                                // Send as text to inject context silently
+                                this.ws.send(JSON.stringify({
+                                    client_content: { turn: { parts: [{ text: contextMsg }] } }
+                                }));
+                                this.lastContextSend = now;
+                            }
+                        }
+                    }
+                }
+            }
+        }, 1000); // 1 FPS analysis is enough for background context
     }
 
     private stopCameraCapture() {
@@ -440,6 +490,15 @@ export class ZenLiveSession {
         for (let i = 0; i < len; i++)
             bytes[i] = binaryString.charCodeAt(i);
         const int16 = new Int16Array(bytes.buffer);
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) {
+            float32[i] = int16[i] / 32768.0;
+        }
+        return float32;
+    }
+
+    private decodeInt16ToFloat32(buffer: ArrayBuffer): Float32Array {
+        const int16 = new Int16Array(buffer);
         const float32 = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) {
             float32[i] = int16[i] / 32768.0;

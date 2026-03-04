@@ -34,12 +34,15 @@ export function useZenSession({
 
     // Fallback if connection fails permanently
     if (reason === "FALLBACK_TO_TEXT") {
-      onError("Mạng yếu, chuyển sang chế độ chat.", "info");
+      onError("Kết nối với thế giới tạm ngưng. Mời bạn nhập chữ (Nội quán).", "info");
       setInputMode('text');
       haptic('warn');
       setConnectionState('disconnected');
     } else if (reason) {
-      onError(reason === "Timeout due to inactivity" ? "Đã ngắt kết nối (Tự động)" : reason, "info");
+      const mindfulReason = reason === "Timeout due to inactivity"
+        ? "Phiên kết thúc trong tĩnh lặng (Tự động)"
+        : reason;
+      onError(mindfulReason, "info");
       setConnectionState('disconnected');
     } else {
       // Clean disconnect
@@ -113,6 +116,12 @@ export function useZenSession({
         setInputMode('text'); // Auto-switch to text
       } else if (e.message.includes("NoMicrophone")) {
         onError("Không tìm thấy Microphone.", "info");
+        setInputMode('text');
+      } else if (e.message.includes("AUTH_REQUIRED")) {
+        onError("Bạn cần đăng nhập để bắt đầu phiên voice bảo mật.", "warn");
+        setInputMode('text');
+      } else if (e.message.includes("AUTH_ISSUER_FAILED")) {
+        onError("Không thể xin token phiên. Vui lòng thử lại sau.", "error");
         setInputMode('text');
       } else if (e.message.includes("API_KEY_MISSING")) {
         onError("Vui lòng nhập API Key.", "warn");

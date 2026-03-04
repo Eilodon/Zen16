@@ -5,3 +5,5 @@ google-cloud-storage
 fastapi[standard]
 uvicorn[standard]
 websockets
+firebase-admin
+redis[hiredis]

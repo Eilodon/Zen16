@@ -65,4 +65,10 @@ declare global {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;
   }
+
+  interface Window {
+    Zen16Auth?: {
+      getIdToken?: () => Promise<string | null>;
+    };
+  }
 }

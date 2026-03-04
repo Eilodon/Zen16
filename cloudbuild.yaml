@@ -1,0 +1,26 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/zen16-guardian', '.']
+
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/$PROJECT_ID/zen16-guardian']
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args:
+    - 'run'
+    - 'deploy'
+    - 'zen16-guardian'
+    - '--image'
+    - 'gcr.io/$PROJECT_ID/zen16-guardian'
+    - '--region'
+    - 'asia-southeast1'
+    - '--platform'
+    - 'managed'
+    - '--no-allow-unauthenticated'
+    - '--set-secrets=GEMINI_API_KEY=zen16-gemini-key:latest'
+    - '--set-secrets=WS_JWT_SECRET=zen16-ws-jwt-secret:latest,REDIS_URL=zen16-redis-url:latest'
+    - '--set-env-vars=WS_AUTH_MODE=required,AUTH_PROVIDER=firebase,WS_TOKEN_TTL_SECONDS=900,ALLOWED_ORIGINS=https://your-frontend-domain.com'
+
+images:
+- 'gcr.io/$PROJECT_ID/zen16-guardian'

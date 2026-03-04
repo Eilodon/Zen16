@@ -1,6 +1,6 @@
 
 import * as React from 'react';
-import { useState, useRef, useEffect, Suspense, useMemo } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { VoiceButton } from './components/VoiceButton';
 import { ZenCard } from './components/ZenCard';
 import { Snackbar } from './components/Snackbar';
@@ -12,36 +12,64 @@ const AudioEngine = React.lazy(() => import('./components/AudioEngine'));
 import { BreathingCircle } from './components/BreathingCircle';
 import { EmergencyProtocol } from './components/EmergencyProtocol';
 import { HistoryPanel } from './components/HistoryPanel';
-import { LoadingScreen } from './components/LoadingScreen';
+import { OnboardingFlow } from './components/OnboardingFlow';
+import { ProfilePanel } from './components/ProfilePanel';
 import { StressIndicator } from './components/StressIndicator';
 import { LiveStatusBar } from './components/LiveStatusBar';
 import { MicroPractices } from './components/MicroPractices';
+import { InputDock } from './components/InputDock';
 import { ConversationEntry, ZenResponse } from './types';
 import { detectEmergency } from './data/emergencyKeywords';
 import { BUDDHIST_TEACHINGS } from './data/buddhistTeachings';
-import { Keyboard, Mic, Languages, SendHorizontal, Brain, Sparkles, RotateCcw, Settings, Activity } from 'lucide-react';
+import { Keyboard, Languages, Brain, Sparkles, RotateCcw, Settings, Activity } from 'lucide-react';
 import { haptic } from './utils/designSystem';
 import { dbService } from './services/db';
 import { useZenSession } from './hooks/useZenSession';
 import { useUIStore, useZenStore } from './store/zenStore';
 import { usePermissions } from './hooks/usePermissions';
+import { useShallow } from 'zustand/react/shallow';
+import { auth } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const OrbViz = React.lazy(() => import('./components/OrbViz'));
 
 export default function App() {
   // --- Global State ---
   const {
-    culturalMode, language, inputMode, snackbar, isLoading, showBreathing, emergencyActive,
+    culturalMode, language, inputMode, snackbar, isLoading, showBreathing, emergencyActive, isOnboardingComplete,
     setCulturalMode, setLanguage, setInputMode, setSnackbar, setIsLoading, setShowBreathing, setEmergencyActive
-  } = useUIStore();
+  } = useUIStore(useShallow((state) => ({
+    culturalMode: state.culturalMode,
+    language: state.language,
+    inputMode: state.inputMode,
+    snackbar: state.snackbar,
+    isLoading: state.isLoading,
+    showBreathing: state.showBreathing,
+    emergencyActive: state.emergencyActive,
+    isOnboardingComplete: state.isOnboardingComplete,
+    setCulturalMode: state.setCulturalMode,
+    setLanguage: state.setLanguage,
+    setInputMode: state.setInputMode,
+    setSnackbar: state.setSnackbar,
+    setIsLoading: state.setIsLoading,
+    setShowBreathing: state.setShowBreathing,
+    setEmergencyActive: state.setEmergencyActive,
+  })));
 
-  const { status, connectionState, zenData, history, setHistory, addToHistory, setZenData } = useZenStore();
+  const { status, connectionState, zenData, history, setHistory, addToHistory, setZenData } = useZenStore(useShallow((state) => ({
+    status: state.status,
+    connectionState: state.connectionState,
+    zenData: state.zenData,
+    history: state.history,
+    setHistory: state.setHistory,
+    addToHistory: state.addToHistory,
+    setZenData: state.setZenData,
+  })));
 
   // --- Permissions Hook ---
   const { requestMediaAccess, micStatus } = usePermissions();
 
   // --- Local UI State ---
-  const [inputText, setInputText] = useState('');
   const [isReasoningOpen, setIsReasoningOpen] = useState(false);
   const [showPractices, setShowPractices] = useState(false);
   const [quoteIndex, setQuoteIndex] = useState(0);
@@ -75,6 +103,29 @@ export default function App() {
       console.error("DB Load failed", e);
     });
   }, [setHistory]);
+
+  // Sync Firebase Auth with UI Store
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const { user, setUser } = useUIStore.getState();
+
+      // If we have a firebase user, sync it to zustand
+      if (firebaseUser) {
+        setUser({
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          email: firebaseUser.email || '',
+          isGuest: false
+        });
+      } else {
+        // Only clear if the user is NOT a guest. If they manually opted into Guest mode,
+        // we don't want Firebase logging them out of Guest mode.
+        if (!user?.isGuest) {
+          setUser(null);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Auto-rotate idle teachings every 8 seconds
   useEffect(() => {
@@ -185,32 +236,32 @@ export default function App() {
     }
   };
 
-  const handleSendText = async (text: string) => {
-    if (!text.trim()) return;
+  const handleSendText = async (text: string): Promise<boolean> => {
+    if (!text.trim()) return false;
 
     // Improved offline handler with clear status notification
     if (!navigator.onLine) {
-      setSnackbar({ text: "Chế độ tĩnh tại (Offline)", kind: "info" });
+      setSnackbar({ text: "Thế giới đang tĩnh lặng. Bạn đang ở chế độ Offline (Nội quán).", kind: "info" });
     }
 
     const response = await sendText(text);
     if (response) {
-      setInputText('');
       if (detectEmergency(text) || detectEmergency(response.wisdom_text)) {
         setEmergencyActive(true);
       }
+      return true;
     }
+    return false;
   };
 
   const handlePracticeSelect = (txt: string) => {
     setShowPractices(false);
-    handleSendText(txt);
+    void handleSendText(txt);
   };
 
   const handleResetSession = () => {
     haptic('warn');
     setZenData(null);
-    setInputText('');
     setSnackbar({ text: "Bắt đầu phiên mới", kind: 'info' });
   };
 
@@ -219,9 +270,9 @@ export default function App() {
       style={{ fontFamily: 'var(--font-body)', color: 'var(--zen-ink, #1c1917)' }}>
 
       {/* --- LAYER 0: Background & Overlays --- */}
-      {isLoading && (
-        <LoadingScreen
-          onComplete={handleLoadingComplete}
+      {!isOnboardingComplete && (
+        <OnboardingFlow
+          onComplete={() => setIsLoading(false)}
         />
       )}
 
@@ -330,6 +381,9 @@ export default function App() {
               </span>
             )}
           </div>
+          <div className="w-px h-6 mx-1" style={{ background: 'rgba(120,113,108,0.15)' }}></div>
+          {/* Profile Panel */}
+          <ProfilePanel />
         </div>
       </div>
 
@@ -546,61 +600,14 @@ export default function App() {
               </button>
             </>
           ) : (
-            <div className="flex items-center gap-2 px-2 w-full max-w-md">
-              {/* MicroPractices icon — also in text mode */}
-              <button
-                onClick={() => setShowPractices(!showPractices)}
-                className="p-2.5 rounded-full transition-all duration-300 shrink-0"
-                style={{
-                  background: showPractices ? 'rgba(249,115,22,0.08)' : 'transparent',
-                  color: showPractices ? '#ea580c' : 'var(--zen-stone-light, #a8a29e)',
-                }}
-                title="Gợi ý thực hành"
-              >
-                <Sparkles size={18} strokeWidth={1.5} />
-              </button>
-
-              <div className="w-px h-5 rounded-full" style={{ background: 'rgba(120,113,108,0.08)' }} />
-
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendText(inputText)}
-                  placeholder={language === 'vi' ? "Chia sẻ với tôi..." : "Share with me..."}
-                  className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-base py-3 px-2"
-                  style={{
-                    fontFamily: 'var(--font-wisdom)',
-                    color: 'var(--zen-ink, #1c1917)',
-                    caretColor: '#f97316',
-                  }}
-                  autoFocus
-                />
-              </div>
-
-              <button
-                onClick={() => handleSendText(inputText)}
-                disabled={!inputText.trim() || status === 'processing'}
-                className="p-3 rounded-full text-white transition-all duration-300 disabled:opacity-40 active:scale-95"
-                style={{
-                  background: inputText.trim() ? 'linear-gradient(135deg, #1c1917, #292524)' : '#d6d3d1',
-                  boxShadow: inputText.trim() ? '0 4px 16px rgba(28,25,23,0.2)' : 'none',
-                }}
-              >
-                <SendHorizontal size={18} />
-              </button>
-
-              <div className="w-px h-5 rounded-full" style={{ background: 'rgba(120,113,108,0.08)' }} />
-
-              <button
-                onClick={toggleInputMode}
-                className="p-2 transition-colors duration-300 shrink-0"
-                style={{ color: 'var(--zen-stone-light, #a8a29e)' }}
-              >
-                <Mic size={20} strokeWidth={1.5} />
-              </button>
-            </div>
+            <InputDock
+              language={language}
+              status={status}
+              showPractices={showPractices}
+              onTogglePractices={() => setShowPractices(!showPractices)}
+              onSendText={handleSendText}
+              onToggleInputMode={toggleInputMode}
+            />
           )}
         </div>
       </div>

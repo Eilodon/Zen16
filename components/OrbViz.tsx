@@ -13,31 +13,31 @@ interface OrbProps {
 // Structure: [Deep Core, Mid Tone, Highlight, Rim/Glow]
 const PALETTES: Record<string, [string, string, string, string]> = {
   // Neutral: "Moonstone" - Đá Mặt Trăng (Huyền ảo, nhẹ nhàng)
-  neutral:  ["#475569", "#cbd5e1", "#ffffff", "#f97316"], 
-  
+  neutral: ["#475569", "#cbd5e1", "#ffffff", "#f97316"],
+
   // Joyful: "Sunstone" - Đá Mặt Trời (Ấm áp, rực rỡ)
-  joyful:   ["#b45309", "#fbbf24", "#fffbeb", "#f59e0b"], 
+  joyful: ["#b45309", "#fbbf24", "#fffbeb", "#f59e0b"],
 
   // Sad: "Deep Sapphire" - Ngọc Bích Biển (Sâu thẳm, chữa lành)
-  sad:      ["#0f172a", "#3b82f6", "#e0f2fe", "#60a5fa"], 
+  sad: ["#0f172a", "#3b82f6", "#e0f2fe", "#60a5fa"],
 
   // Anxious: "Smoky Quartz" - Thạch Anh Khói (Nối đất, lửa trong tâm)
-  anxious:  ["#451a03", "#c2410c", "#ffedd5", "#ea580c"], 
+  anxious: ["#451a03", "#c2410c", "#ffedd5", "#ea580c"],
 
   // Calm: "Imperial Jade" - Ngọc Lục Bảo (Rừng già, an tĩnh)
-  calm:     ["#064e3b", "#10b981", "#ecfdf5", "#34d399"], 
+  calm: ["#064e3b", "#10b981", "#ecfdf5", "#34d399"],
 
   // Seeking: "Amethyst" - Thạch Anh Tím (Tâm linh, huyền bí)
-  seeking:  ["#4c1d95", "#9333ea", "#f3e8ff", "#a855f7"], 
+  seeking: ["#4c1d95", "#9333ea", "#f3e8ff", "#a855f7"],
 
   // Stressed: "Ruby" - Hồng Ngọc (Năng lượng dồn nén)
-  stressed: ["#881337", "#f43f5e", "#ffe4e6", "#fb7185"], 
+  stressed: ["#881337", "#f43f5e", "#ffe4e6", "#fb7185"],
 
   // Confused: "Opal" - Đá Mắt Mèo (Sương mù, biến ảo)
-  confused: ["#164e63", "#06b6d4", "#cffafe", "#22d3ee"], 
+  confused: ["#164e63", "#06b6d4", "#cffafe", "#22d3ee"],
 
   // Lonely: "Lapis Lazuli" - Thanh Kim (Trời đêm cô độc nhưng đẹp)
-  lonely:   ["#1e1b4b", "#4f46e5", "#e0e7ff", "#6366f1"], 
+  lonely: ["#1e1b4b", "#4f46e5", "#e0e7ff", "#6366f1"],
 };
 
 const DEFAULT_PALETTE: [string, string, string, string] = ["#475569", "#cbd5e1", "#ffffff", "#f97316"];
@@ -57,63 +57,99 @@ const vertexShader = `
   varying vec3 vViewPosition;
 
   // Simplex Noise helpers
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  // Simplex 4D Noise helpers
   vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+  float mod289(float x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+  float permute(float x) { return mod289(((x*34.0)+1.0)*x); }
   vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-  float snoise(vec3 v) {
-    const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
-    const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
-    vec3 i  = floor(v + dot(v, C.yyy) );
-    vec3 x0 = v - i + dot(i, C.xxx) ;
-    vec3 g = step(x0.yzx, x0.xyz);
-    vec3 l = 1.0 - g;
-    vec3 i1 = min( g.xyz, l.zxy );
-    vec3 i2 = max( g.xyz, l.zxy );
-    vec3 x1 = x0 - i1 + C.xxx;
-    vec3 x2 = x0 - i2 + C.yyy;
-    vec3 x3 = x0 - D.yyy;
-    i = mod289(i);
-    vec4 p = permute( permute( permute(
-              i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
-            + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
-            + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
-    float n_ = 0.142857142857;
-    vec3  ns = n_ * D.wyz - D.xzx;
-    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-    vec4 x_ = floor(j * ns.z);
-    vec4 y_ = floor(j - 7.0 * x_ );
-    vec4 x = x_ *ns.x + ns.yyyy;
-    vec4 y = y_ *ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(x) - abs(y);
-    vec4 b0 = vec4( x.xy, y.xy );
-    vec4 b1 = vec4( x.zw, y.zw );
-    vec4 s0 = floor(b0)*2.0 + 1.0;
-    vec4 s1 = floor(b1)*2.0 + 1.0;
-    vec4 sh = -step(h, vec4(0.0));
-    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
-    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
-    vec3 p0 = vec3(a0.xy,h.x);
-    vec3 p1 = vec3(a0.zw,h.y);
-    vec3 p2 = vec3(a1.xy,h.z);
-    vec3 p3 = vec3(a1.zw,h.w);
+  float taylorInvSqrt(float r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+  vec4 grad4(float j, vec4 ip) {
+    const vec4 ones = vec4(1.0, 1.0, 1.0, -1.0);
+    vec4 p,s;
+    p.xyz = floor( fract (vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;
+    p.w = 1.5 - dot(abs(p.xyz), ones.xyz);
+    s = vec4(lessThan(p, vec4(0.0)));
+    p.xyz = p.xyz + (s.xyz*2.0 - 1.0) * s.www; 
+    return p;
+  }
+
+  // (sqrt(5) - 1)/4 = F4, (5 - sqrt(5))/20 = G4
+  #define F4 0.309016994374947451
+  #define G4 0.138196601125010515
+
+  float snoise(vec4 v) {
+    const vec4  C = vec4( 0.138196601125011,  // (5 - sqrt(5))/20  G4
+                         0.276393202250021,  // 2 * G4
+                         0.414589803375032,  // 3 * G4
+                        -0.447213595499958); // -1 + 4 * G4
+
+    // First corner
+    vec4 i  = floor(v + dot(v, vec4(F4)) );
+    vec4 x0 = v -   i + dot(i, C.xxxx);
+
+    // Other corners
+    vec4 i0;
+    vec3 isX = step( x0.yzw, x0.xxx );
+    vec3 isYZ = step( x0.zww, x0.yyz );
+    i0.x = isX.x + isX.y + isX.z;
+    i0.yzw = 1.0 - isX;
+    i0.y += isYZ.x + isYZ.y;
+    i0.zw += 1.0 - isYZ.xy;
+    i0.z += isYZ.z;
+    i0.w += 1.0 - isYZ.z;
+
+    vec4 i3 = clamp( i0, 0.0, 1.0 );
+    vec4 i2 = clamp( i0-1.0, 0.0, 1.0 );
+    vec4 i1 = clamp( i0-2.0, 0.0, 1.0 );
+
+    vec4 x1 = x0 - i1 + C.xxxx;
+    vec4 x2 = x0 - i2 + C.yyyy;
+    vec4 x3 = x0 - i3 + C.zzzz;
+    vec4 x4 = x0 + C.wwww;
+
+    i = mod289(i); 
+    float j0 = permute( permute( permute( permute(i.w) + i.z) + i.y) + i.x);
+    vec4 j1 = permute( permute( permute( permute (
+            i.w + vec4(i1.w, i2.w, i3.w, 1.0 ))
+          + i.z + vec4(i1.z, i2.z, i3.z, 1.0 ))
+          + i.y + vec4(i1.y, i2.y, i3.y, 1.0 ))
+          + i.x + vec4(i1.x, i2.x, i3.x, 1.0 ));
+
+    vec4 ip = vec4(1.0/294.0, 1.0/49.0, 1.0/7.0, 0.0) ;
+
+    vec4 p0 = grad4(j0,   ip);
+    vec4 p1 = grad4(j1.x, ip);
+    vec4 p2 = grad4(j1.y, ip);
+    vec4 p3 = grad4(j1.z, ip);
+    vec4 p4 = grad4(j1.w, ip);
+
     vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
     p0 *= norm.x;
     p1 *= norm.y;
     p2 *= norm.z;
     p3 *= norm.w;
-    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-    m = m * m;
-    return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+    p4 *= taylorInvSqrt(dot(p4,p4));
+
+    // Mix contributions from the five corners
+    vec3 m0 = max(0.6 - vec3(dot(x0,x0), dot(x1,x1), dot(x2,x2)), 0.0);
+    vec2 m1 = max(0.6 - vec2(dot(x3,x3), dot(x4,x4)            ), 0.0);
+    m0 = m0 * m0;
+    m1 = m1 * m1;
+    return 49.0 * ( dot(m0*m0, vec3( dot( p0, x0 ), dot( p1, x1 ), dot( p2, x2 )))
+                  + dot(m1*m1, vec2( dot( p3, x3 ), dot( p4, x4 ) ) ) ) ;
   }
 
   void main() {
     vUv = uv;
     vNormal = normalize(normalMatrix * normal);
     
-    // Organic movement: Combine low freq swell + high freq ripples
-    float noiseLow = snoise(vec3(position.x * 0.6, position.y * 0.6, uTime * 0.2));
-    float noiseHigh = snoise(vec3(position.x * 2.5 + uTime, position.y * 2.5, uTime * 0.5));
+    // 4D Noise allows us to evolve the shape over time AND audio intensity without sliding through space
+    float evolveTime = uTime * 0.2 + (uAudioLow * 1.5); // Audio pushes it forward in 4th dimension
+    
+    float noiseLow = snoise(vec4(position.xyz * 0.7, evolveTime));
+    float noiseHigh = snoise(vec4(position.xyz * 2.5, evolveTime * 2.0));
     
     float combinedNoise = (noiseLow * 0.7 + noiseHigh * 0.3);
     
@@ -183,18 +219,18 @@ const fragmentShader = `
 
 // --- 3. COMPONENTS ---
 
-const LiquidOrb = ({ 
-  emotion, 
+const LiquidOrb = ({
+  emotion,
   frequencyData,
-  detail 
-}: { 
-  emotion: string, 
+  detail
+}: {
+  emotion: string,
   frequencyData?: Uint8Array,
   detail: number
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  
+
   const targetColors = useRef({
     deep: new THREE.Color(),
     mid: new THREE.Color(),
@@ -225,13 +261,13 @@ const LiquidOrb = ({
     if (!materialRef.current || !meshRef.current) return;
 
     const time = state.clock.elapsedTime;
-    
+
     // Audio Analysis
     let lowEnergy = 0;
     let highEnergy = 0;
     if (frequencyData && frequencyData.length > 0) {
-       lowEnergy = frequencyData.slice(0, 5).reduce((a,b)=>a+b,0) / 5 / 255;
-       highEnergy = frequencyData.slice(15, 30).reduce((a,b)=>a+b,0) / 15 / 255;
+      lowEnergy = frequencyData.slice(0, 5).reduce((a, b) => a + b, 0) / 5 / 255;
+      highEnergy = frequencyData.slice(15, 30).reduce((a, b) => a + b, 0) / 15 / 255;
     }
 
     // Smooth Color Transitions
@@ -247,10 +283,10 @@ const LiquidOrb = ({
     materialRef.current.uniforms.uAudioHigh.value = THREE.MathUtils.lerp(materialRef.current.uniforms.uAudioHigh.value, highEnergy, 0.15);
 
     // "Breathing" Intensity
-    const breath = Math.sin(time * 0.6) * 0.08 + 0.08; 
+    const breath = Math.sin(time * 0.6) * 0.08 + 0.08;
     const targetIntensity = 0.1 + breath + (lowEnergy * 0.6);
     materialRef.current.uniforms.uIntensity.value = THREE.MathUtils.lerp(
-        materialRef.current.uniforms.uIntensity.value, targetIntensity, 0.05
+      materialRef.current.uniforms.uIntensity.value, targetIntensity, 0.05
     );
 
     // Floating Rotation
@@ -263,22 +299,22 @@ const LiquidOrb = ({
       {/* 1. Main Liquid Orb */}
       <mesh ref={meshRef} scale={1.4}>
         <icosahedronGeometry args={[1, detail]} />
-        <shaderMaterial 
+        <shaderMaterial
           ref={materialRef}
           vertexShader={vertexShader}
           fragmentShader={fragmentShader}
           uniforms={uniforms}
         />
       </mesh>
-      
+
       {/* 2. Inner Core Light (Glow from center) */}
       <mesh scale={0.65}>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshBasicMaterial 
-            color="#ffffff" 
-            transparent 
-            opacity={0.4} 
-            blending={THREE.AdditiveBlending} 
+        <meshBasicMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.4}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
     </group>
@@ -287,88 +323,88 @@ const LiquidOrb = ({
 
 // --- 4. ORBITAL PARTICLES (Energy Field) ---
 const SwarmParticles = ({ count = 60, emotion, frequencyData }: { count?: number, emotion: string, frequencyData?: Uint8Array }) => {
-    const meshRef = useRef<THREE.InstancedMesh>(null);
-    const dummy = useMemo(() => new THREE.Object3D(), []);
-    
-    // Init particles in a spherical shell
-    const particles = useMemo(() => {
-      return new Array(count).fill(0).map((_, i) => ({
-        // Distributed on sphere surface roughly
-        phi: Math.acos(-1 + (2 * i) / count),
-        theta: Math.sqrt(count * Math.PI) * i,
-        radiusBase: 2.2 + Math.random() * 1.5,
-        speed: 0.005 + Math.random() * 0.01,
-        size: Math.random() * 0.04 + 0.01,
-        phase: Math.random() * Math.PI * 2
-      }));
-    }, [count]);
-    
-    const colorTarget = useRef(new THREE.Color(DEFAULT_PALETTE[3]));
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
 
-    useEffect(() => {
-        const p = PALETTES[emotion] || DEFAULT_PALETTE;
-        colorTarget.current.set(p[3]); 
-    }, [emotion]);
-  
-    useFrame((state) => {
-      if(!meshRef.current) return;
-      
-      let energy = 0;
-      if (frequencyData && frequencyData.length > 0) {
-        energy = frequencyData.slice(0, 30).reduce((a,b)=>a+b,0) / 30 / 255;
-      }
-      
-      const time = state.clock.elapsedTime;
-      (meshRef.current.material as THREE.MeshBasicMaterial).color.lerp(colorTarget.current, 0.05);
+  // Init particles in a spherical shell
+  const particles = useMemo(() => {
+    return new Array(count).fill(0).map((_, i) => ({
+      // Distributed on sphere surface roughly
+      phi: Math.acos(-1 + (2 * i) / count),
+      theta: Math.sqrt(count * Math.PI) * i,
+      radiusBase: 2.2 + Math.random() * 1.5,
+      speed: 0.005 + Math.random() * 0.01,
+      size: Math.random() * 0.04 + 0.01,
+      phase: Math.random() * Math.PI * 2
+    }));
+  }, [count]);
 
-      particles.forEach((p, i) => {
-        // Orbit logic
-        const activeSpeed = p.speed * (1 + energy * 8); // Spin faster with audio
-        
-        // Update angles
-        const currentTheta = p.theta + time * activeSpeed;
-        const currentPhi = p.phi + Math.sin(time * 0.5 + p.phase) * 0.1; // Gentle bobbing
+  const colorTarget = useRef(new THREE.Color(DEFAULT_PALETTE[3]));
 
-        // Radius expands with energy
-        const r = p.radiusBase + (energy * 1.0) + Math.sin(time * 2 + p.phase) * 0.1;
+  useEffect(() => {
+    const p = PALETTES[emotion] || DEFAULT_PALETTE;
+    colorTarget.current.set(p[3]);
+  }, [emotion]);
 
-        const x = r * Math.sin(currentPhi) * Math.cos(currentTheta);
-        const y = r * Math.sin(currentPhi) * Math.sin(currentTheta);
-        const z = r * Math.cos(currentPhi);
-        
-        dummy.position.set(x, y, z);
-        dummy.rotation.set(time, time, time);
-        
-        // Scale pulse
-        const scale = p.size * (1 + energy * 4 + Math.sin(time * 3 + p.phase)*0.3);
-        dummy.scale.setScalar(scale);
-        
-        dummy.updateMatrix();
-        meshRef.current!.setMatrixAt(i, dummy.matrix);
-      });
-      
-      meshRef.current.instanceMatrix.needsUpdate = true;
-      // Rotate entire field slowly
-      meshRef.current.rotation.y = time * 0.05;
+  useFrame((state) => {
+    if (!meshRef.current) return;
+
+    let energy = 0;
+    if (frequencyData && frequencyData.length > 0) {
+      energy = frequencyData.slice(0, 30).reduce((a, b) => a + b, 0) / 30 / 255;
+    }
+
+    const time = state.clock.elapsedTime;
+    (meshRef.current.material as THREE.MeshBasicMaterial).color.lerp(colorTarget.current, 0.05);
+
+    particles.forEach((p, i) => {
+      // Orbit logic
+      const activeSpeed = p.speed * (1 + energy * 8); // Spin faster with audio
+
+      // Update angles
+      const currentTheta = p.theta + time * activeSpeed;
+      const currentPhi = p.phi + Math.sin(time * 0.5 + p.phase) * 0.1; // Gentle bobbing
+
+      // Radius expands with energy
+      const r = p.radiusBase + (energy * 1.0) + Math.sin(time * 2 + p.phase) * 0.1;
+
+      const x = r * Math.sin(currentPhi) * Math.cos(currentTheta);
+      const y = r * Math.sin(currentPhi) * Math.sin(currentTheta);
+      const z = r * Math.cos(currentPhi);
+
+      dummy.position.set(x, y, z);
+      dummy.rotation.set(time, time, time);
+
+      // Scale pulse
+      const scale = p.size * (1 + energy * 4 + Math.sin(time * 3 + p.phase) * 0.3);
+      dummy.scale.setScalar(scale);
+
+      dummy.updateMatrix();
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
     });
-  
-    return (
-      <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-        <sphereGeometry args={[1, 6, 6]} />
-        <meshBasicMaterial 
-            transparent 
-            opacity={0.7} 
-            blending={THREE.AdditiveBlending}
-        />
-      </instancedMesh>
-    )
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    // Rotate entire field slowly
+    meshRef.current.rotation.y = time * 0.05;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
+      <sphereGeometry args={[1, 6, 6]} />
+      <meshBasicMaterial
+        transparent
+        opacity={0.7}
+        blending={THREE.AdditiveBlending}
+      />
+    </instancedMesh>
+  )
 };
 
-export default function OrbViz({ analyser, emotion, frequencyData }: OrbProps) {
+function OrbVizComponent({ analyser, emotion, frequencyData }: OrbProps) {
   const [isVisible, setIsVisible] = useState(true);
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    const detail = isMobile ? 20 : 40; // Optimization: Lowered poly count for production stability
-    const particleCount = isMobile ? 30 : 60; // Optimization: Fewer particles for better frame consistency
+  const detail = isMobile ? 20 : 40; // Optimization: Lowered poly count for production stability
+  const particleCount = isMobile ? 30 : 60; // Optimization: Fewer particles for better frame consistency
 
   useEffect(() => {
     const handleVisibilityChange = () => setIsVisible(document.visibilityState === 'visible');
@@ -378,11 +414,11 @@ export default function OrbViz({ analyser, emotion, frequencyData }: OrbProps) {
 
   return (
     <div className="w-full h-full absolute inset-0 z-0 pointer-events-none fade-in">
-      <Canvas 
+      <Canvas
         dpr={[1, 1.5]} // Cap DPR for performance
         frameloop={isVisible ? 'always' : 'never'}
         camera={{ position: [0, 0, 5.5], fov: 45 }}
-        gl={{ 
+        gl={{
           antialias: true,
           powerPreference: 'high-performance',
           alpha: true,
@@ -392,18 +428,20 @@ export default function OrbViz({ analyser, emotion, frequencyData }: OrbProps) {
         <directionalLight position={[5, 5, 5]} intensity={1.5} color="#ffffff" />
         <pointLight position={[-5, -5, -5]} intensity={0.5} color="#ffffff" />
 
-        <LiquidOrb 
-          emotion={emotion} 
-          frequencyData={frequencyData} 
+        <LiquidOrb
+          emotion={emotion}
+          frequencyData={frequencyData}
           detail={detail}
         />
-        
-        <SwarmParticles 
-           count={particleCount} 
-           emotion={emotion} 
-           frequencyData={frequencyData} 
+
+        <SwarmParticles
+          count={particleCount}
+          emotion={emotion}
+          frequencyData={frequencyData}
         />
       </Canvas>
     </div>
   );
 }
+
+export default React.memo(OrbVizComponent);

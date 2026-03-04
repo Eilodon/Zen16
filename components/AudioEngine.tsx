@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
-import { Volume2, VolumeX, Wind, Waves, CloudRain, Droplets, Bell } from 'lucide-react';
+import { Volume2, VolumeX, Waves, CloudRain, Droplets, Bell } from 'lucide-react';
 import { getSharedAudioContext } from '../services/audioContext';
 
 interface Props {
@@ -26,7 +26,7 @@ export const playEmergencyAlert = async () => {
   lfo.stop("+3");
 };
 
-export default function AudioEngine({ 
+function AudioEngine({ 
   emotion, 
   breathing, 
   ambientSound = 'silence', 
@@ -175,3 +175,5 @@ export default function AudioEngine({
     </div>
   );
 }
+
+export default React.memo(AudioEngine);

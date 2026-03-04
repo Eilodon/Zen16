@@ -4,6 +4,12 @@ import { AppState, ZenResponse, CulturalMode, Language, InputMode, ConversationE
 
 export type PermissionStatus = 'idle' | 'prompting' | 'granted' | 'denied';
 
+export interface User {
+  name: string;
+  email: string;
+  isGuest: boolean;
+}
+
 interface UIState {
   culturalMode: CulturalMode;
   language: Language;
@@ -12,7 +18,9 @@ interface UIState {
   isLoading: boolean;
   showBreathing: boolean;
   emergencyActive: boolean;
-  
+  user: User | null;
+  isOnboardingComplete: boolean;
+
   setCulturalMode: (mode: CulturalMode) => void;
   setLanguage: (lang: Language) => void;
   setInputMode: (mode: InputMode) => void;
@@ -20,6 +28,8 @@ interface UIState {
   setIsLoading: (loading: boolean) => void;
   setShowBreathing: (show: boolean) => void;
   setEmergencyActive: (active: boolean) => void;
+  setUser: (user: User | null) => void;
+  setIsOnboardingComplete: (complete: boolean) => void;
 }
 
 interface ZenSessionState {
@@ -28,11 +38,11 @@ interface ZenSessionState {
   zenData: ZenResponse | null;
   history: ConversationEntry[];
   connectionAttempts: number;
-  
+
   // Permissions State
   micStatus: PermissionStatus;
   cameraStatus: PermissionStatus;
-  
+
   setStatus: (status: AppState) => void;
   setConnectionState: (state: ConnectionState) => void;
   setZenData: (data: ZenResponse | null) => void;
@@ -40,7 +50,7 @@ interface ZenSessionState {
   addToHistory: (entry: ConversationEntry) => void;
   incrementConnectionAttempts: () => void;
   resetConnectionAttempts: () => void;
-  
+
   setMicStatus: (status: PermissionStatus) => void;
   setCameraStatus: (status: PermissionStatus) => void;
 }
@@ -53,6 +63,8 @@ export const useUIStore = create<UIState>((set) => ({
   isLoading: true,
   showBreathing: false,
   emergencyActive: false,
+  user: null,
+  isOnboardingComplete: false,
 
   setCulturalMode: (mode) => set({ culturalMode: mode }),
   setLanguage: (lang) => set({ language: lang }),
@@ -61,6 +73,8 @@ export const useUIStore = create<UIState>((set) => ({
   setIsLoading: (loading) => set({ isLoading: loading }),
   setShowBreathing: (show) => set({ showBreathing: show }),
   setEmergencyActive: (active) => set({ emergencyActive: active }),
+  setUser: (user) => set({ user }),
+  setIsOnboardingComplete: (complete) => set({ isOnboardingComplete: complete }),
 }));
 
 export const useZenStore = create<ZenSessionState>((set) => ({
@@ -69,7 +83,7 @@ export const useZenStore = create<ZenSessionState>((set) => ({
   zenData: null,
   history: [],
   connectionAttempts: 0,
-  
+
   micStatus: 'idle',
   cameraStatus: 'idle',
 
@@ -80,7 +94,7 @@ export const useZenStore = create<ZenSessionState>((set) => ({
   addToHistory: (entry) => set((state) => ({ history: [...state.history, entry].slice(-50) })),
   incrementConnectionAttempts: () => set((state) => ({ connectionAttempts: state.connectionAttempts + 1 })),
   resetConnectionAttempts: () => set({ connectionAttempts: 0 }),
-  
+
   setMicStatus: (status) => set({ micStatus: status }),
   setCameraStatus: (status) => set({ cameraStatus: status }),
 }));

@@ -38,14 +38,19 @@
 
 ```
 User (React Frontend)
-    ↓ WebSocket bidi-stream
-Cloud Run (Python FastAPI)
+    ↓ Firebase Auth ID Token
+Cloud Run /auth/ws-token
+    ↓ short-lived WS JWT
+Cloud Run /live (WebSocket bidi-stream)
+    ↓
+Python FastAPI
     ↓ google-genai SDK Live API
 Gemini 2.0 Flash Live (Audio + Vision)
     ↓ Tool Calls
 ├── update_zen_state → Frontend UI (Orb, Cards, Breathing)
 ├── trigger_emergency_alert → Pub/Sub → Family SMS/Email
-└── Session Memory → Firestore
+├── Session Memory → Firestore
+└── Distributed rate limits → Redis/Memorystore
 ```
 
 ### Google Cloud Services Used (5+)
@@ -56,6 +61,7 @@ Gemini 2.0 Flash Live (Audio + Vision)
 | **Firestore** | Persistent session memory & user history |
 | **Pub/Sub** | Emergency alert event bus |
 | **Cloud Storage** | Audio history archival |
+| **Memorystore (Redis)** | Distributed rate limiting across Cloud Run instances |
 | **Cloud Build** | Automated deployment (IaC) |
 
 ---
@@ -77,6 +83,15 @@ npm install
 # Set backend URL (after deploying, or use localhost)
 echo "VITE_BACKEND_URL=ws://localhost:8080" > .env.local
 
+# Firebase web config (required for automatic WS token flow)
+echo "VITE_FIREBASE_API_KEY=<firebase-api-key>" >> .env.local
+echo "VITE_FIREBASE_AUTH_DOMAIN=<project>.firebaseapp.com" >> .env.local
+echo "VITE_FIREBASE_PROJECT_ID=<project-id>" >> .env.local
+# Optional:
+# echo "VITE_FIREBASE_APP_ID=<app-id>" >> .env.local
+# echo "VITE_AUTH_TOKEN_ENDPOINT=http://localhost:8080/auth/ws-token" >> .env.local
+# echo "VITE_WS_AUTH_REQUIRED=off" >> .env.local   # off|on|auto (default auto)
+
 # Run
 npm run dev
 ```
@@ -92,8 +107,28 @@ pip install -r requirements.txt
 # Set API key for local dev
 export GEMINI_API_KEY="your-api-key"
 
+# Local dev defaults
+export WS_AUTH_MODE="off"
+export ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+export AUTH_PROVIDER="firebase"
+# Optional distributed limiter in local:
+# export REDIS_URL="redis://127.0.0.1:6379/0"
+
 # Run
 uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
+### Frontend Auth Bridge (Optional)
+
+If your app already manages authentication elsewhere, expose an ID-token provider and Zen16 will consume it automatically:
+
+```ts
+window.Zen16Auth = {
+  getIdToken: async () => {
+    // Return Firebase ID token (or null when signed out)
+    return yourAuthModule.getFirebaseIdToken();
+  }
+}
 ```
 
 ### Deploy to Cloud Run
@@ -101,6 +136,20 @@ uvicorn main:app --host 0.0.0.0 --port 8080
 ```bash
 # Set your GCP project
 export GOOGLE_CLOUD_PROJECT="your-project-id"
+
+# Required when WS auth is enabled (default in deploy.sh)
+export WS_JWT_SECRET="a-strong-random-secret"
+export ALLOWED_ORIGINS="https://your-frontend-domain.com"
+export WS_AUTH_MODE="required"
+export AUTH_PROVIDER="firebase"
+
+# Optional: Distributed rate limit via Memorystore Redis
+# export REDIS_URL="redis://:<redis-auth>@10.x.x.x:6379/0"
+# export WS_TOKEN_TTL_SECONDS="900"
+# export FIREBASE_CHECK_REVOKED="true"
+
+# Optional: make service public only if you know what you are doing
+# export ALLOW_UNAUTHENTICATED="true"
 
 # One-command deploy
 chmod +x deploy.sh
@@ -113,14 +162,15 @@ chmod +x deploy.sh
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 19, Vite, TypeScript, Three.js (3D Orb), Tone.js (Ambient Audio) |
-| Backend | Python 3.12, FastAPI, google-genai SDK |
+| Frontend | React 19, Vite, TypeScript, Firebase Auth SDK, Three.js (3D Orb), Tone.js |
+| Backend | Python 3.12, FastAPI, google-genai SDK, Firebase Admin SDK |
 | AI Model | Gemini 2.0 Flash Live (native audio + vision) |
 | Database | Cloud Firestore (session memory) |
 | Events | Cloud Pub/Sub (emergency alerts) |
 | Storage | Cloud Storage (audio history) |
 | Hosting | Cloud Run (containerized) |
-| Auth | Application Default Credentials (ADC) |
+| Auth | Firebase ID Token → short-lived WS JWT issuer |
+| Rate Limiting | Redis (Memorystore) + local fallback |
 
 ---
 
@@ -130,10 +180,13 @@ chmod +x deploy.sh
 Zen16/
 ├── backend/
 │   ├── main.py           # FastAPI + Gemini Live API proxy
+│   ├── scripts/
+│   │   └── generate_ws_token.py
 │   ├── requirements.txt  # Python dependencies
 │   └── Dockerfile        # Cloud Run container
 ├── services/
-│   └── liveAgent.ts      # WebSocket client (bidi-stream)
+│   ├── liveAgent.ts      # WebSocket client (bidi-stream)
+│   └── wsAuth.ts         # Firebase ID token -> WS token flow
 ├── components/
 │   ├── OrbViz.tsx        # Three.js 3D consciousness orb
 │   ├── BreathingCircle.tsx
