@@ -2,6 +2,7 @@ import { ZenResponse, CulturalMode, Language } from "../types";
 import { getRandomTeaching, BUDDHIST_TEACHINGS } from "../data/buddhistTeachings";
 import {
     AUDIO_WORKLET_CODE,
+    downsampleTo16kMono,
     floatTo16BitPCM,
     RobustVoiceDetector,
 } from "./audioManager";
@@ -13,6 +14,10 @@ import { telemetry } from "./telemetry";
 // Cloud Run URL — update after deployment
 const CLOUD_RUN_URL = import.meta.env.VITE_BACKEND_URL || "ws://localhost:8080";
 const WS_URL = `${CLOUD_RUN_URL.replace(/^http/, "ws")}/live`;
+
+interface SessionOptions {
+    enableVision?: boolean;
+}
 
 // ─── Text Query (REST fallback) ─────────────────────────────
 export const sendZenTextQuery = async (
@@ -86,6 +91,7 @@ export class ZenLiveSession {
         reason?: string,
         isReconnecting?: boolean
     ) => void;
+    private readonly enableVision: boolean;
 
     // Audio
     private inputContext: AudioContext | null = null;
@@ -114,6 +120,8 @@ export class ZenLiveSession {
     private lastVisionFrameSend = 0;
     private pendingInterruptionAt: number | null = null;
     private readonly VISION_FRAME_INTERVAL_MS = 3000;
+    private isReconnectingNow = false;
+    private networkOffline = false;
 
     // Idle timer
     private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -131,13 +139,15 @@ export class ZenLiveSession {
         onDisconnectCallback: (
             reason?: string,
             isReconnecting?: boolean
-        ) => void
+        ) => void,
+        options: SessionOptions = {}
     ) {
         this.mode = mode;
         this.lang = lang;
         this.onStateChange = onStateChange;
         this.onAudioActivity = onAudioActivity;
         this.onDisconnectCallback = onDisconnectCallback;
+        this.enableVision = options.enableVision !== false;
         this.boundHandleNetworkRecovery =
             this.handleNetworkRecovery.bind(this);
         this.boundHandleNetworkOffline =
@@ -149,6 +159,7 @@ export class ZenLiveSession {
             this.isManuallyClosed = false;
             this.reconnectAttempts = 0;
         }
+        this.isReconnectingNow = false;
         telemetry.markSessionStart();
         this.pendingInterruptionAt = null;
         this.teardownConnectionState(true);
@@ -162,18 +173,28 @@ export class ZenLiveSession {
         try {
             // ── Step 1: Get User Media (audio + video for vision) ──
             let stream: MediaStream;
+            const mediaConstraints: MediaStreamConstraints = {
+                audio: {
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+                video: this.enableVision
+                    ? {
+                          facingMode: { ideal: "user" },
+                          width: { ideal: 640 },
+                          height: { ideal: 480 },
+                      }
+                    : false,
+            };
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 16000,
-                    },
-                    video: { facingMode: "user", width: 640, height: 480 },
-                });
-                this.videoStream = stream;
+                stream = await navigator.mediaDevices.getUserMedia(
+                    mediaConstraints
+                );
+                if (this.enableVision) {
+                    this.videoStream = stream;
+                }
             } catch {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({
@@ -220,7 +241,9 @@ export class ZenLiveSession {
             this.inputSource.connect(analyser);
 
             // ── Step 4.5: Init Face Landmarker (Background) ──
-            this.initFaceLandmarker();
+            if (this.enableVision) {
+                this.initFaceLandmarker();
+            }
 
             // ── Step 5: Connect WebSocket to Cloud Run ──
             const wsAccessToken = await getWebSocketAccessToken();
@@ -233,6 +256,7 @@ export class ZenLiveSession {
                     telemetry.markReconnectSuccess();
                 }
                 this.reconnectAttempts = 0;
+                this.isReconnectingNow = false;
                 this.onDisconnectCallback(undefined, false);
             };
 
@@ -249,7 +273,7 @@ export class ZenLiveSession {
                     this.isAiSpeaking = true;
                     this.onAudioActivity(true);
                     const audioData = this.decodeInt16ToFloat32(event.data);
-                    this.scheduleAudioChunk(audioData);
+                    void this.scheduleAudioChunk(audioData);
                     return;
                 }
 
@@ -289,8 +313,14 @@ export class ZenLiveSession {
                 }
             };
 
-            this.ws.onclose = (e) => this.handleConnectionLoss("closed", e);
-            this.ws.onerror = () => this.handleConnectionLoss("error");
+            let didHandleSocketLoss = false;
+            const handleSocketLoss = (type: string, event?: any) => {
+                if (didHandleSocketLoss) return;
+                didHandleSocketLoss = true;
+                this.handleConnectionLoss(type, event);
+            };
+            this.ws.onclose = (e) => handleSocketLoss("closed", e);
+            this.ws.onerror = () => handleSocketLoss("error");
 
             // ── Step 5: Forward audio frames via WebSocket ──
             this.workletNode.port.onmessage = (event) => {
@@ -308,7 +338,11 @@ export class ZenLiveSession {
                         }
 
                         if (this.ws?.readyState === WebSocket.OPEN) {
-                            const buffer = floatTo16BitPCM(inputData);
+                            const downsampledInput = downsampleTo16kMono(
+                                inputData,
+                                this.inputContext?.sampleRate || 16000
+                            );
+                            const buffer = floatTo16BitPCM(downsampledInput);
                             this.ws.send(buffer);
                         }
                     }
@@ -316,7 +350,9 @@ export class ZenLiveSession {
             };
 
             // ── Step 6: Camera frames (every 2s for vision) ──
-            this.startCameraCapture();
+            if (this.enableVision) {
+                this.startCameraCapture();
+            }
 
             return analyser;
         } catch (error) {
@@ -355,7 +391,9 @@ export class ZenLiveSession {
         this.videoElement = document.createElement("video");
         this.videoElement.srcObject = new MediaStream([videoTrack]);
         this.videoElement.muted = true;
-        this.videoElement.play();
+        this.videoElement.play().catch((error) => {
+            console.warn("[Zen16 Vision] Video preview start failed", error);
+        });
 
         this.cameraInterval = setInterval(() => {
             if (!this.videoElement) return;
@@ -465,12 +503,17 @@ export class ZenLiveSession {
 
     // ─── Network Handlers ────────────────────────────────────
     private handleNetworkOffline() {
+        this.networkOffline = true;
         this.interruptPlayback();
         this.onDisconnectCallback("Mất kết nối mạng...", true);
     }
 
     private handleNetworkRecovery() {
         if (!this.isManuallyClosed) {
+            this.networkOffline = false;
+            if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
+            if (this.isReconnectingNow) return;
+            this.isReconnectingNow = true;
             this.onDisconnectCallback(
                 "Đã có mạng trở lại. Đang kết nối...",
                 true
@@ -483,7 +526,16 @@ export class ZenLiveSession {
 
     private handleConnectionLoss(type: string, event?: any) {
         if (this.isManuallyClosed) return;
-        this.teardownConnectionState(false);
+        this.teardownConnectionState(true, true);
+
+        const browserOffline =
+            this.networkOffline ||
+            (typeof navigator !== "undefined" && !navigator.onLine);
+        if (browserOffline) {
+            this.isReconnectingNow = false;
+            this.onDisconnectCallback("Mất kết nối mạng...", true);
+            return;
+        }
 
         if (this.reconnectAttempts < this.MAX_RETRIES) {
             telemetry.markReconnectAttempt();
@@ -491,6 +543,7 @@ export class ZenLiveSession {
             const delay =
                 1000 * Math.pow(2, this.reconnectAttempts - 1) +
                 Math.random() * 500;
+            this.isReconnectingNow = true;
             this.onDisconnectCallback(
                 `Thử lại lần ${this.reconnectAttempts}...`,
                 true
@@ -503,6 +556,7 @@ export class ZenLiveSession {
                 );
             }, delay);
         } else {
+            this.isReconnectingNow = false;
             this.disconnect("FALLBACK_TO_TEXT");
         }
     }
@@ -528,8 +582,20 @@ export class ZenLiveSession {
         }
     }
 
-    private scheduleAudioChunk(float32Array: Float32Array) {
+    private async ensureAudioContextRunning() {
         if (!this.inputContext) return;
+        if (this.inputContext.state === "running") return;
+        try {
+            await this.inputContext.resume();
+        } catch (error) {
+            console.warn("[Zen16 Audio] Failed to resume AudioContext", error);
+        }
+    }
+
+    private async scheduleAudioChunk(float32Array: Float32Array) {
+        if (!this.inputContext) return;
+        await this.ensureAudioContextRunning();
+        if (this.inputContext.state !== "running") return;
         const now = this.inputContext.currentTime;
         if (this.nextStartTime < now) {
             this.nextStartTime = now + 0.05;
@@ -580,6 +646,7 @@ export class ZenLiveSession {
     // ─── Disconnect ──────────────────────────────────────────
     disconnect(reason?: string) {
         this.isManuallyClosed = true;
+        this.networkOffline = false;
         this.teardownConnectionState(true);
         this.onDisconnectCallback(reason, false);
     }
@@ -591,18 +658,23 @@ export class ZenLiveSession {
         }
     }
 
-    private teardownConnectionState(closeSocket: boolean) {
+    private teardownConnectionState(
+        closeSocket: boolean,
+        keepNetworkListeners: boolean = false
+    ) {
         this.clearReconnectTimer();
         this.pendingInterruptionAt = null;
         this.lastVisionFrameSend = 0;
-        window.removeEventListener(
-            "online",
-            this.boundHandleNetworkRecovery
-        );
-        window.removeEventListener(
-            "offline",
-            this.boundHandleNetworkOffline
-        );
+        if (!keepNetworkListeners) {
+            window.removeEventListener(
+                "online",
+                this.boundHandleNetworkRecovery
+            );
+            window.removeEventListener(
+                "offline",
+                this.boundHandleNetworkOffline
+            );
+        }
 
         if (this.idleTimer) {
             clearTimeout(this.idleTimer);

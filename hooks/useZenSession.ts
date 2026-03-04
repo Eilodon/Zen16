@@ -23,8 +23,8 @@ export function useZenSession({
 
   // Select state from stores to avoid prop drilling
   const { culturalMode, language, setInputMode, setEmergencyActive } = useUIStore();
-  const { status, setStatus, setZenData, setConnectionState } = useZenStore();
-  const text = React.useMemo(() => (language === 'vi'
+  const { status, cameraStatus, setStatus, setZenData, setConnectionState } = useZenStore();
+  const messages = React.useMemo(() => (language === 'vi'
     ? {
       fallbackToText: "Kết nối với thế giới tạm ngưng. Mời bạn nhập chữ (Nội quán).",
       idleTimeout: "Phiên kết thúc trong tĩnh lặng (Tự động)",
@@ -59,13 +59,13 @@ export function useZenSession({
 
     // Fallback if connection fails permanently
     if (reason === "FALLBACK_TO_TEXT") {
-      onError(text.fallbackToText, "info");
+      onError(messages.fallbackToText, "info");
       setInputMode('text');
       haptic('warn');
       setConnectionState('disconnected');
     } else if (reason) {
       const mindfulReason = reason === "Timeout due to inactivity"
-        ? text.idleTimeout
+        ? messages.idleTimeout
         : reason;
       onError(mindfulReason, "info");
       setConnectionState('disconnected');
@@ -77,7 +77,7 @@ export function useZenSession({
     liveSessionRef.current = null;
     analyserRef.current = null;
     setStatus('idle');
-  }, [onError, setStatus, setInputMode, setConnectionState, text]);
+  }, [onError, setStatus, setInputMode, setConnectionState, messages]);
 
   // Handle incoming data updates from Gemini
   const handleStateChange = React.useCallback((data: Partial<ZenResponse>) => {
@@ -112,7 +112,10 @@ export function useZenSession({
         language,
         handleStateChange,
         (active) => setStatus(active ? 'speaking' : 'listening'),
-        handleDisconnect
+        handleDisconnect,
+        {
+          enableVision: cameraStatus === 'granted',
+        }
       ) as LiveSessionHandle;
 
       haptic('success');
@@ -138,19 +141,19 @@ export function useZenSession({
 
       // Specific Error Handling
       if (e.message.includes("PermissionDenied")) {
-        onError(text.noMicPermission, "info");
+        onError(messages.noMicPermission, "info");
         setInputMode('text'); // Auto-switch to text
       } else if (e.message.includes("NoMicrophone")) {
-        onError(text.noMicFound, "info");
+        onError(messages.noMicFound, "info");
         setInputMode('text');
       } else if (e.message.includes("AUTH_REQUIRED")) {
-        onError(text.authRequired, "warn");
+        onError(messages.authRequired, "warn");
         setInputMode('text');
       } else if (e.message.includes("AUTH_ISSUER_FAILED")) {
-        onError(text.tokenIssuerFailed, "error");
+        onError(messages.tokenIssuerFailed, "error");
         setInputMode('text');
       } else if (e.message.includes("API_KEY_MISSING")) {
-        onError(text.apiKeyMissing, "warn");
+        onError(messages.apiKeyMissing, "warn");
       } else {
         // Silently fail connection errors to text mode
         setInputMode('text');
@@ -158,7 +161,7 @@ export function useZenSession({
 
       liveSessionRef.current?.disconnect();
     }
-  }, [status, culturalMode, language, handleStateChange, handleDisconnect, onError, setStatus, setConnectionState, setInputMode, text]);
+  }, [status, cameraStatus, culturalMode, language, handleStateChange, handleDisconnect, onError, setStatus, setConnectionState, setInputMode, messages]);
 
   // Manual Disconnect
   const disconnect = React.useCallback(() => {
@@ -169,8 +172,8 @@ export function useZenSession({
   }, []);
 
   // Text Query Function
-  const sendText = React.useCallback(async (text: string) => {
-    if (!text.trim()) return null;
+  const sendText = React.useCallback(async (userText: string) => {
+    if (!userText.trim()) return null;
     if (liveSessionRef.current) liveSessionRef.current.disconnect();
 
     try {
@@ -179,7 +182,7 @@ export function useZenSession({
 
       const apiKey = "";
       const { sendZenTextQuery } = await import('../services/liveAgent');
-      const response = await sendZenTextQuery(apiKey, text, culturalMode, language);
+      const response = await sendZenTextQuery(apiKey, userText, culturalMode, language);
 
       setZenData(response);
       haptic('success');
@@ -189,14 +192,14 @@ export function useZenSession({
     } catch (e: any) {
       console.error(e);
       if (e.message.includes("API_KEY_MISSING")) {
-        onError(text.apiKeyMissing, "warn");
+        onError(messages.apiKeyMissing, "warn");
       } else {
-        onError(text.cannotProcess, "error");
+        onError(messages.cannotProcess, "error");
       }
       setStatus('idle');
       return null;
     }
-  }, [culturalMode, language, onError, setStatus, setZenData, text]);
+  }, [culturalMode, language, onError, setStatus, setZenData, messages]);
 
   return {
     connect,

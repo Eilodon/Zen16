@@ -1,26 +1,26 @@
 steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/zen16-guardian', '.']
-
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/$PROJECT_ID/zen16-guardian']
-
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  entrypoint: gcloud
+  entrypoint: 'bash'
   args:
-    - 'run'
-    - 'deploy'
-    - 'zen16-guardian'
-    - '--image'
-    - 'gcr.io/$PROJECT_ID/zen16-guardian'
-    - '--region'
-    - 'asia-southeast1'
-    - '--platform'
-    - 'managed'
-    - '--no-allow-unauthenticated'
-    - '--set-secrets=GEMINI_API_KEY=zen16-gemini-key:latest'
-    - '--set-secrets=WS_JWT_SECRET=zen16-ws-jwt-secret:latest,REDIS_URL=zen16-redis-url:latest'
-    - '--set-env-vars=WS_AUTH_MODE=required,AUTH_PROVIDER=firebase,WS_TOKEN_TTL_SECONDS=900,ALLOWED_ORIGINS=https://your-frontend-domain.com'
+  - '-c'
+  - |
+    gcloud run deploy zen16-guardian \
+      --source ./backend \
+      --region "${_REGION}" \
+      --project "$PROJECT_ID" \
+      --platform managed \
+      --no-allow-unauthenticated \
+      --memory 1Gi \
+      --cpu 1 \
+      --timeout 300 \
+      --set-env-vars "^|^GOOGLE_CLOUD_PROJECT=$PROJECT_ID|GOOGLE_CLOUD_LOCATION=${_REGION}|WS_AUTH_MODE=required|AUTH_PROVIDER=firebase|WS_TOKEN_TTL_SECONDS=900|WS_JWT_AUDIENCE=zen16-live|ALLOWED_ORIGINS=${_ALLOWED_ORIGINS}|LIVE_MODEL=${_LIVE_MODEL}|REDIS_KEY_PREFIX=zen16|MAX_MESSAGES_PER_MINUTE=240|MAX_AUDIO_FRAMES_PER_MINUTE=2400|MAX_BYTES_PER_MINUTE=5242880|MAX_CONNECTIONS_PER_IP=3|MAX_SESSION_SECONDS=1800|MAX_AUTH_REQUESTS_PER_MINUTE=30|WS_JWT_SECRET=${_WS_JWT_SECRET}|REDIS_URL=${_REDIS_URL}|GEMINI_API_KEY=${_GEMINI_API_KEY}|FIREBASE_CHECK_REVOKED=${_FIREBASE_CHECK_REVOKED}|FIREBASE_SERVICE_ACCOUNT_FILE=${_FIREBASE_SERVICE_ACCOUNT_FILE}"
 
-images:
-- 'gcr.io/$PROJECT_ID/zen16-guardian'
+substitutions:
+  _REGION: 'asia-southeast1'
+  _ALLOWED_ORIGINS: 'https://your-frontend-domain.com'
+  _LIVE_MODEL: 'gemini-2.5-flash-native-audio-preview-09-2025'
+  _WS_JWT_SECRET: ''
+  _REDIS_URL: ''
+  _GEMINI_API_KEY: ''
+  _FIREBASE_CHECK_REVOKED: 'false'
+  _FIREBASE_SERVICE_ACCOUNT_FILE: ''

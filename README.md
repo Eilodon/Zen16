@@ -48,7 +48,7 @@ Cloud Run /live (WebSocket bidi-stream)
     ↓
 Python FastAPI
     ↓ google-genai SDK Live API
-Gemini 2.0 Flash Live (Audio + Vision)
+Gemini Live Native Audio model (Audio + Vision)
     ↓ Tool Calls
 ├── update_zen_state → Frontend UI (Orb, Cards, Breathing)
 ├── trigger_emergency_alert → Pub/Sub topic (`emergency-alerts`)
@@ -116,6 +116,8 @@ export GEMINI_API_KEY="your-api-key"
 export WS_AUTH_MODE="off"
 export ALLOWED_ORIGINS="http://localhost:5000,http://127.0.0.1:5000"
 export AUTH_PROVIDER="firebase"
+# Optional model override (default in backend/main.py is a native-audio preview model):
+# export LIVE_MODEL="gemini-2.5-flash-native-audio-preview-09-2025"
 # Optional distributed limiter in local:
 # export REDIS_URL="redis://127.0.0.1:6379/0"
 # Optional limiter tuning for realtime voice:
@@ -151,15 +153,19 @@ export WS_JWT_SECRET="a-strong-random-secret"
 export ALLOWED_ORIGINS="https://your-frontend-domain.com"
 export WS_AUTH_MODE="required"
 export AUTH_PROVIDER="firebase"
+export LIVE_MODEL="gemini-2.5-flash-native-audio-preview-09-2025"
 
 # Optional: Distributed rate limit via Memorystore Redis
 # export REDIS_URL="redis://:<redis-auth>@10.x.x.x:6379/0"
 # export WS_TOKEN_TTL_SECONDS="900"
 # export FIREBASE_CHECK_REVOKED="true"
-# NOTE: deploy.sh currently forwards core auth/redis envs.
-# For advanced quota knobs (MAX_MESSAGES_PER_MINUTE, MAX_AUDIO_FRAMES_PER_MINUTE,
-# MAX_AUTH_REQUESTS_PER_MINUTE, MAX_BYTES_PER_MINUTE, MAX_CONNECTIONS_PER_IP, etc),
-# set them directly on Cloud Run service env vars or extend deploy.sh.
+# Optional limiter tuning:
+# export MAX_MESSAGES_PER_MINUTE="240"
+# export MAX_AUDIO_FRAMES_PER_MINUTE="2400"
+# export MAX_AUTH_REQUESTS_PER_MINUTE="30"
+# export MAX_BYTES_PER_MINUTE="5242880"
+# export MAX_CONNECTIONS_PER_IP="3"
+# export MAX_SESSION_SECONDS="1800"
 
 # Optional: make service public only if you know what you are doing
 # export ALLOW_UNAUTHENTICATED="true"
@@ -167,6 +173,14 @@ export AUTH_PROVIDER="firebase"
 # One-command deploy
 chmod +x deploy.sh
 ./deploy.sh
+```
+
+### Cloud Build Trigger (CI/CD)
+
+`cloudbuild.yaml` is aligned with the same deployment path (`--source ./backend`) as `deploy.sh`.
+
+```bash
+gcloud builds submit --config cloudbuild.yaml .
 ```
 
 ---
@@ -177,7 +191,7 @@ chmod +x deploy.sh
 |-------|-----------|
 | Frontend | React 19, Vite, TypeScript, Firebase Auth SDK, Three.js (3D Orb), Tone.js |
 | Backend | Python 3.12, FastAPI, google-genai SDK, Firebase Admin SDK |
-| AI Model | Gemini 2.0 Flash Live (native audio + vision) |
+| AI Model | Gemini Live Native Audio (preview) |
 | Database | Cloud Firestore (session state snapshots/events) |
 | Events | Cloud Pub/Sub (emergency alerts) |
 | Storage | Cloud Storage client (extension-ready) |
@@ -210,7 +224,9 @@ Zen16-main/
 │   ├── EmergencyProtocol.tsx
 │   └── ...
 ├── docs/
-│   └── COMPETITION_PLAYBOOK.md
+│   ├── COMPETITION_PLAYBOOK.md
+│   ├── QA_MANUAL_12_CASES.md
+│   └── RELEASE_CHECKLIST.md
 ├── deploy.sh             # Automated Cloud Run deployment
 ├── vite.config.ts        # Manual chunking + dev server config
 ├── App.tsx               # Main application
@@ -225,6 +241,7 @@ Zen16-main/
 - **Mandatory Tech**: ✅ Gemini Live API, ✅ google-genai SDK, ✅ Google Cloud (Cloud Run)
 - **Content**: #GeminiLiveAgentChallenge
 - **Playbook**: See `docs/COMPETITION_PLAYBOOK.md` for demo script, evidence checklist, and final submission QA.
+- **Release Gate**: See `docs/RELEASE_CHECKLIST.md` and `docs/QA_MANUAL_12_CASES.md`.
 
 ---
 
