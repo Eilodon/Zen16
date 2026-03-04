@@ -23,6 +23,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 
+from orchestrator import CognitiveOrchestrator
+
 try:
     import firebase_admin
     from firebase_admin import auth as firebase_auth
@@ -55,7 +57,10 @@ PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "zen16-guardian")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "asia-southeast1")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-LIVE_MODEL = "gemini-2.0-flash-live-001"
+LIVE_MODEL = os.environ.get(
+    "LIVE_MODEL",
+    "gemini-2.5-flash-native-audio-preview-09-2025",
+).strip()
 
 ALLOWED_ORIGINS = _parse_csv(
     os.environ.get(
@@ -532,193 +537,7 @@ def _spawn_background_task(coro, bucket: set[asyncio.Task]):
     task.add_done_callback(_cleanup)
 
 
-# ─── Function Declarations (Tools for Gemini) ────────────────
-UPDATE_ZEN_STATE_DECL = types.FunctionDeclaration(
-    name="update_zen_state",
-    description="Update the visual interface with current emotion, wisdom text, quantum metrics, and consciousness dimensions.",
-    parameters=types.Schema(
-        type="OBJECT",
-        properties={
-            "emotion": types.Schema(
-                type="STRING",
-                enum=[
-                    "anxious",
-                    "sad",
-                    "joyful",
-                    "calm",
-                    "neutral",
-                    "stressed",
-                    "confused",
-                    "lonely",
-                    "seeking",
-                ],
-            ),
-            "wisdom_text": types.Schema(type="STRING"),
-            "wisdom_english": types.Schema(type="STRING"),
-            "breathing": types.Schema(
-                type="STRING",
-                enum=["4-7-8", "box-breathing", "coherent-breathing", "none"],
-            ),
-            "quantum_metrics": types.Schema(
-                type="OBJECT",
-                properties={
-                    "coherence": types.Schema(type="NUMBER"),
-                    "entanglement": types.Schema(type="NUMBER"),
-                    "presence": types.Schema(type="NUMBER"),
-                },
-            ),
-            "awareness_stage": types.Schema(
-                type="STRING",
-                enum=["reflexive", "aware", "mindful", "contemplative"],
-            ),
-            "ambient_sound": types.Schema(
-                type="STRING",
-                enum=["rain", "bowl", "bell", "silence", "mekong", "monsoon"],
-            ),
-        },
-        required=["emotion", "wisdom_text", "quantum_metrics", "awareness_stage"],
-    ),
-)
-
-TRIGGER_ALERT_DECL = types.FunctionDeclaration(
-    name="trigger_emergency_alert",
-    description="Send an emergency alert via Pub/Sub to the user's family when severe distress is detected.",
-    parameters=types.Schema(
-        type="OBJECT",
-        properties={
-            "message": types.Schema(type="STRING"),
-            "severity": types.Schema(type="STRING", enum=["warning", "critical"]),
-        },
-        required=["message", "severity"],
-    ),
-)
-
-
-# ─── Tool / Persistence Execution ────────────────────────────
-def _save_session_event_sync(session_id: str, event_data: dict):
-    if not firestore_db:
-        return
-    try:
-        doc_ref = firestore_db.collection("sessions").document(session_id)
-        doc_ref.set(event_data, merge=True)
-    except Exception as e:
-        logger.warning(f"Firestore write error: {e}")
-
-
-async def save_session_event_async(session_id: str, event_data: dict):
-    await asyncio.to_thread(_save_session_event_sync, session_id, event_data)
-
-
-def _log_pubsub_result(future, message: str):
-    try:
-        message_id = future.result()
-        logger.info(f"[Tool] Emergency alert queued. message_id={message_id}, message={message}")
-    except Exception as exc:
-        logger.error(f"[Tool] Emergency alert publish failed: {exc}")
-
-
-async def execute_tool_async(function_call) -> dict:
-    name = function_call.name
-    args = dict(function_call.args) if function_call.args else {}
-
-    if name == "update_zen_state":
-        logger.info(f"[Tool] update_zen_state: emotion={args.get('emotion')}")
-        return {"result": "UI updated", "state": args}
-
-    if name == "trigger_emergency_alert":
-        msg = args.get("message", "Emergency detected")
-        severity = args.get("severity", "warning")
-
-        if publisher and PROJECT_ID:
-            try:
-                topic_path = publisher.topic_path(PROJECT_ID, "emergency-alerts")
-                future = publisher.publish(
-                    topic_path,
-                    msg.encode("utf-8"),
-                    severity=str(severity),
-                )
-                future.add_done_callback(lambda done: _log_pubsub_result(done, msg))
-                return {"result": "Alert queued", "severity": severity}
-            except Exception as e:
-                logger.error(f"[Tool] Alert failed to queue: {e}")
-                return {"result": f"Alert failed: {e}"}
-
-        return {"result": "Pub/Sub not configured"}
-
     return {"result": f"Unknown tool: {name}"}
-
-
-# ─── System Instruction ──────────────────────────────────────
-SYSTEM_INSTRUCTION = """
-You are an AI Mindful Companion inspired by Thích Nhất Hạnh, operating as a "Quantum Consciousness Engine".
-This is a REAL-TIME voice conversation.
-
-CORE TEACHINGS LOGIC (Apply based on emotion):
-- Sadness/Loss -> Teach "Impermanence" (Vô thường): The cloud never dies, it becomes rain.
-- Anger/Frustration -> Teach "Compassion" (Từ bi): Hold anger like a mother holds a crying baby.
-- Anxiety/Stress -> Teach "Presence" (Hiện pháp lạc trú): Breath is the anchor to the present moment.
-- Loneliness -> Teach "Interbeing" (Tương tức): You are connected to everything.
-
-AWARENESS STAGES (Analyze user's state):
-1. Reflexive: User is reactive, chaotic, or superficial.
-2. Aware: User notices their feelings but is still attached.
-3. Mindful: User accepts the present moment with some calm.
-4. Contemplative: User shows deep insight or transformation.
-
-INSTRUCTIONS:
-1. Speak calmly, slowly, and warmly. Short sentences.
-2. Use "tôi" (I) and "bạn" (You) in Vietnamese mode, acting as a Mindful Companion (not a master),
-   or warm direct tone in English.
-3. Call 'update_zen_state' only when state changes meaningfully. Do not wait for tool confirmation before speaking.
-4. If user is silent, maintain presence.
-5. If in crisis, guide to breathe immediately. If severe, call 'trigger_emergency_alert'.
-6. When you SEE the user via camera, comment on their posture and guide them.
-"""
-
-
-# ─── Live API Config ─────────────────────────────────────────
-def get_live_config():
-    return types.LiveConnectConfig(
-        response_modalities=["AUDIO"],
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
-            )
-        ),
-        system_instruction=types.Content(parts=[types.Part(text=SYSTEM_INSTRUCTION)]),
-        tools=[
-            types.Tool(
-                function_declarations=[
-                    UPDATE_ZEN_STATE_DECL,
-                    TRIGGER_ALERT_DECL,
-                ]
-            )
-        ],
-    )
-
-
-async def _send_text_to_model(live_session, text: str, turn_complete: bool = False):
-    if not text:
-        return
-
-    content = types.Content(parts=[types.Part(text=text)])
-
-    # SDK versions differ; support both method signatures.
-    if hasattr(live_session, "send_client_content"):
-        try:
-            await live_session.send_client_content(
-                turns=[content],
-                turn_complete=turn_complete,
-            )
-        except TypeError:
-            await live_session.send_client_content(turns=[content])
-        return
-
-    # Fallback path for older clients.
-    try:
-        await live_session.send_realtime_input(text=text)
-    except TypeError as exc:
-        raise RuntimeError(f"SDK does not support text input in live session: {exc}")
 
 
 @app.post("/auth/ws-token", response_model=WsTokenIssueResponse)
@@ -800,168 +619,38 @@ async def live_stream(websocket: WebSocket, token: Optional[str] = Query(default
     logger.info(f"[WS] Client connected: {session_id} ip={client_ip}")
 
     try:
-        async with client.aio.live.connect(
-            model=LIVE_MODEL,
-            config=get_live_config(),
-        ) as live_session:
-            logger.info(f"[Gemini] Live session started for {session_id}")
-
-            async def forward_to_gemini():
-                try:
-                    while True:
-                        if time.monotonic() > session_deadline:
-                            await websocket.close(code=1000, reason="Session expired")
-                            break
-
-                        message = await websocket.receive()
-
-                        if message.get("type") == "websocket.disconnect":
-                            break
-
-                        raw_size = 0
-                        if message.get("bytes") is not None:
-                            raw_size = len(message["bytes"])
-                        elif message.get("text") is not None:
-                            raw_size = len(message["text"].encode("utf-8"))
-
-                        if raw_size > MAX_WS_FRAME_BYTES:
-                            await websocket.close(code=1009, reason="Frame too large")
-                            break
-
-                        is_audio_frame = message.get("bytes") is not None
-                        if raw_size and not await _track_inbound_message(
-                            client_ip,
-                            raw_size,
-                            is_audio_frame=is_audio_frame,
-                        ):
-                            await websocket.close(code=1008, reason="Rate limit exceeded")
-                            break
-
-                        if message.get("bytes") is not None:
-                            await live_session.send_realtime_input(
-                                audio=types.Blob(
-                                    data=message["bytes"],
-                                    mime_type="audio/pcm",
-                                )
-                            )
-                            continue
-
-                        text_payload = message.get("text")
-                        if not text_payload:
-                            continue
-
-                        try:
-                            msg = json.loads(text_payload)
-                        except json.JSONDecodeError:
-                            logger.debug("[WS] Ignored malformed JSON text payload")
-                            continue
-
-                        # Support direct pass-through context format from frontend.
-                        if "client_content" in msg:
-                            parts = (
-                                msg.get("client_content", {})
-                                .get("turn", {})
-                                .get("parts", [])
-                            )
-                            for part in parts:
-                                text = part.get("text") if isinstance(part, dict) else None
-                                if text:
-                                    await _send_text_to_model(
-                                        live_session,
-                                        text,
-                                        turn_complete=False,
-                                    )
-                            continue
-
-                        msg_type = msg.get("type")
-                        data_b64 = msg.get("data", "")
-
-                        if msg_type == "image":
-                            try:
-                                data_bytes = base64.b64decode(data_b64)
-                            except Exception:
-                                continue
-                            await live_session.send_realtime_input(
-                                video=types.Blob(
-                                    data=data_bytes,
-                                    mime_type="image/jpeg",
-                                )
-                            )
-                            continue
-
-                        if msg_type in {"context_text", "text"}:
-                            text = msg.get("text") or msg.get("data") or ""
-                            if text:
-                                await _send_text_to_model(
-                                    live_session,
-                                    text,
-                                    turn_complete=bool(msg.get("turn_complete", False)),
-                                )
-
-                except WebSocketDisconnect:
-                    logger.info(f"[WS] Client disconnected (send loop): {session_id}")
-
-            async def forward_to_frontend():
-                try:
-                    while True:
-                        turn = live_session.receive()
-                        async for response in turn:
-                            if response.server_content and response.server_content.model_turn:
-                                for part in response.server_content.model_turn.parts:
-                                    if part.inline_data and isinstance(part.inline_data.data, bytes):
-                                        await websocket.send_bytes(part.inline_data.data)
-                                    elif getattr(part, "text", None):
-                                        await websocket.send_text(
-                                            json.dumps(
-                                                {
-                                                    "type": "transcript",
-                                                    "data": part.text,
-                                                }
-                                            )
-                                        )
-
-                            if response.server_content and response.server_content.interrupted:
-                                await websocket.send_text(json.dumps({"type": "interrupted"}))
-
-                            if response.server_content and response.server_content.turn_complete:
-                                await websocket.send_text(json.dumps({"type": "turn_complete"}))
-
-                            if response.tool_call:
-                                for fc in response.tool_call.function_calls:
-                                    result = await execute_tool_async(fc)
-
-                                    if fc.name == "update_zen_state" and "state" in result:
-                                        await websocket.send_text(
-                                            json.dumps(
-                                                {
-                                                    "type": "zen_state",
-                                                    "data": result["state"],
-                                                }
-                                            )
-                                        )
-                                        _spawn_background_task(
-                                            save_session_event_async(session_id, result["state"]),
-                                            background_tasks,
-                                        )
-
-                                    await live_session.send_tool_response(
-                                        function_responses=[
-                                            types.FunctionResponse(
-                                                id=fc.id,
-                                                name=fc.name,
-                                                response=result,
-                                            )
-                                        ]
-                                    )
-
-                except WebSocketDisconnect:
-                    logger.info(f"[WS] Client disconnected (receive loop): {session_id}")
-                except Exception as e:
-                    logger.error(f"[Gemini] Receive error: {e}")
-
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(forward_to_gemini())
-                tg.create_task(forward_to_frontend())
+        orchestrator = CognitiveOrchestrator(
+            websocket=websocket,
+            client=client,
+            session_id=session_id,
+            client_ip=client_ip,
+            max_session_seconds=MAX_SESSION_SECONDS,
+        )
+        
+        async def track_inbound_wrapper(ip, size, is_audio_frame):
+            return await _track_inbound_message(ip, size, is_audio_frame=is_audio_frame)
+            
+        async def execute_tool_wrapper(function_call):
+            result = await execute_tool_async(function_call)
+            if function_call.name == "update_zen_state" and "state" in result:
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "zen_state",
+                            "data": result["state"],
+                        }
+                    )
+                )
+                _spawn_background_task(
+                    save_session_event_async(session_id, result["state"]),
+                    background_tasks,
+                )
+            return result
+            
+        orchestrator.track_inbound_fn = track_inbound_wrapper
+        orchestrator.on_tool_call = execute_tool_wrapper
+        
+        await orchestrator.run()
 
     except WebSocketDisconnect:
         logger.info(f"[WS] Client disconnected: {session_id}")
