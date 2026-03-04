@@ -11,33 +11,40 @@ interface Props {
   isEmergency?: boolean;
 }
 
-function AudioEngine({ 
-  emotion, 
-  breathing, 
-  ambientSound = 'silence', 
+function AudioEngine({
+  emotion,
+  breathing,
+  ambientSound = 'silence',
   isSpeaking,
-  isEmergency = false 
+  isEmergency = false
 }: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [initialized, setInitialized] = useState(false);
-  
+
   // Synths Refs
   const rainSynth = useRef<Tone.Noise | null>(null);
   const rainFilter = useRef<Tone.AutoFilter | null>(null);
-  
+
   const droneSynth = useRef<Tone.Oscillator | null>(null); // For Mekong/Bowl
   const droneLfo = useRef<Tone.LFO | null>(null);
-  
+
   const masterVol = useRef<Tone.Volume | null>(null);
 
   // 1. Initialization
   useEffect(() => {
     let isDisposed = false;
+    let didInit = false;
+
     const initAudio = async () => {
+      // Prevent multiple initializations
+      if (didInit || isDisposed) return;
+
       try {
         await getSharedAudioContext();
         if (isDisposed) return;
-        
+
+        didInit = true;
+
         masterVol.current = new Tone.Volume(0).toDestination();
 
         // Rain / Monsoon Generator (Brown Noise)
@@ -57,15 +64,24 @@ function AudioEngine({
         droneSynth.current.volume.value = -20;
 
         setInitialized(true);
+
+        // Remove event listeners after first init
+        window.removeEventListener('click', initAudio);
+        window.removeEventListener('touchstart', initAudio);
       } catch (err) {
         console.error("Audio Engine Init Error:", err);
       }
     };
 
-    initAudio();
+    // Attach to user gestures to safely start AudioContext
+    window.addEventListener('click', initAudio);
+    window.addEventListener('touchstart', initAudio);
 
     return () => {
       isDisposed = true;
+      window.removeEventListener('click', initAudio);
+      window.removeEventListener('touchstart', initAudio);
+
       rainSynth.current?.dispose();
       rainFilter.current?.dispose();
       droneSynth.current?.dispose();
@@ -93,7 +109,7 @@ function AudioEngine({
         rainSynth.current?.start();
         rainFilter.current?.start();
         rainSynth.current?.volume.rampTo(ambientSound === 'monsoon' ? -15 : -20, fadeTime);
-      } 
+      }
       else if (ambientSound === 'mekong') {
         droneSynth.current?.set({ type: "triangle", frequency: 60 }); // Low hum
         droneLfo.current?.start();
@@ -111,7 +127,7 @@ function AudioEngine({
         bell.triggerAttackRelease("C4", "8n");
         setTimeout(() => bell.dispose(), 2000);
       }
-      
+
     } catch (e) {
       console.warn("Audio engine state error", e);
     }
@@ -121,11 +137,11 @@ function AudioEngine({
   // 3. Ducking Logic (Lower volume when AI speaks)
   useEffect(() => {
     if (!masterVol.current) return;
-    
+
     // If speaking, drop volume by 10db
     const targetVol = isSpeaking ? -15 : 0;
     masterVol.current.volume.rampTo(targetVol, 0.5);
-    
+
   }, [isSpeaking]);
 
   const toggleMute = () => {
@@ -138,24 +154,24 @@ function AudioEngine({
   return (
     <div className="absolute top-4 left-4 z-50 pointer-events-auto">
       <div className="flex flex-col gap-2">
-         {/* Mute Toggle */}
-         <button 
-           onClick={toggleMute}
-           className="p-2 bg-white/40 backdrop-blur-md rounded-full text-stone-600 hover:bg-white/80 transition-colors shadow-sm border border-white/40"
-         >
-           {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-         </button>
+        {/* Mute Toggle */}
+        <button
+          onClick={toggleMute}
+          className="p-2 bg-white/40 backdrop-blur-md rounded-full text-stone-600 hover:bg-white/80 transition-colors shadow-sm border border-white/40"
+        >
+          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
 
-         {/* Ambient Indicator (Only if playing) */}
-         {!isMuted && !isEmergency && ambientSound !== 'silence' && (
-           <div className="p-2 bg-white/20 backdrop-blur-sm rounded-full text-stone-500 animate-[fadeIn_1s]">
-              {ambientSound === 'rain' && <CloudRain size={18} />}
-              {ambientSound === 'monsoon' && <Droplets size={18} />}
-              {ambientSound === 'mekong' && <Waves size={18} />}
-              {ambientSound === 'bowl' && <Bell size={18} />}
-              {ambientSound === 'bell' && <Bell size={18} />}
-           </div>
-         )}
+        {/* Ambient Indicator (Only if playing) */}
+        {!isMuted && !isEmergency && ambientSound !== 'silence' && (
+          <div className="p-2 bg-white/20 backdrop-blur-sm rounded-full text-stone-500 animate-[fadeIn_1s]">
+            {ambientSound === 'rain' && <CloudRain size={18} />}
+            {ambientSound === 'monsoon' && <Droplets size={18} />}
+            {ambientSound === 'mekong' && <Waves size={18} />}
+            {ambientSound === 'bowl' && <Bell size={18} />}
+            {ambientSound === 'bell' && <Bell size={18} />}
+          </div>
+        )}
       </div>
     </div>
   );

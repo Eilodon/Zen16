@@ -3,13 +3,13 @@
 
 # 🧘 Zen16 Guardian — AI Zen Master
 
-**A real-time, multimodal AI mental health companion inspired by Thích Nhất Hạnh**
+**A real-time, multimodal mindful companion inspired by Thích Nhất Hạnh**
 
 *Live Agents Category — Gemini Live Agent Challenge*
 
 [![Google Cloud](https://img.shields.io/badge/Google%20Cloud-Run-blue?logo=googlecloud)](https://cloud.google.com/run)
 [![Gemini](https://img.shields.io/badge/Gemini-Live%20API-orange?logo=google)](https://ai.google.dev/gemini-api/docs/live)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-Not%20specified-lightgrey)](#)
 
 </div>
 
@@ -21,27 +21,29 @@
 
 ## 💡 The Solution
 
-**Zen16 Guardian** is a real-time AI companion that users can **talk to naturally** via voice. It **sees** the user via camera (detecting stress posture, fidgeting), **speaks** calmly like a Zen Master, and applies Buddhist psychological wisdom from Thích Nhất Hạnh's teachings — all powered by **Gemini Live API** on **Google Cloud**.
+**Zen16 Guardian** is a real-time AI companion that users can **talk to naturally** via voice. It **sees** the user via camera (sending low-rate frames to Gemini + local blink/head-pose heuristics), **speaks** calmly like a Zen guide, and applies Buddhist psychological wisdom from Thích Nhất Hạnh's teachings — powered by **Gemini Live API** on **Google Cloud**.
 
 ### Key Features
 - 🗣️ **Natural Voice Conversation** — Real-time bidi-streaming via Gemini Live API with barge-in support
-- 👁️ **Vision AI** — Camera detects stress, posture, and environment (Buddhist altar detection)
+- 👁️ **Vision AI (Live + Local)** — Sends compact camera frames to Gemini Live while running local blink/head-pose tracking
 - 🧠 **Quantum Consciousness Engine** — Tracks 6 dimensions of awareness + emotion analysis
 - 🫧 **Immersive 3D Orb** — Three.js visualization responds to emotional state in real-time
 - 🫁 **Guided Breathing** — AI triggers 4-7-8, box breathing exercises when stress detected
-- 🚨 **Emergency Protocol** — Pub/Sub alerts family members when severe distress detected
-- 💾 **Session Memory** — Firestore persistent memory for long-term relationship
+- 🚨 **Emergency Protocol** — Queues crisis events to Pub/Sub (`emergency-alerts`) for downstream notification workers
+- 💾 **Session Persistence** — Writes session state snapshots/events to Firestore
 - 📈 **Realtime Telemetry** — Tracks TTFB, reconnect reliability, auth failures, and vision frame delivery
+- 🔐 **Production Hardening** — WS JWT issuer flow, auth gate, distributed Redis rate limits, abuse protection
+- ⚡ **Mobile Performance** — Lazy boundaries + manual chunk splitting for faster first load
 
 ---
 
 ## 🏗️ Architecture
 
-```
+``` 
 User (React Frontend)
-    ↓ Firebase Auth ID Token
-Cloud Run /auth/ws-token
-    ↓ short-lived WS JWT
+    ↓ (Optional) Firebase/Bridge ID Token
+Cloud Run /auth/ws-token (issuer + rate limit)
+    ↓ short-lived WS JWT (optional in WS_AUTH_MODE=off)
 Cloud Run /live (WebSocket bidi-stream)
     ↓
 Python FastAPI
@@ -49,8 +51,9 @@ Python FastAPI
 Gemini 2.0 Flash Live (Audio + Vision)
     ↓ Tool Calls
 ├── update_zen_state → Frontend UI (Orb, Cards, Breathing)
-├── trigger_emergency_alert → Pub/Sub → Family SMS/Email
-├── Session Memory → Firestore
+├── trigger_emergency_alert → Pub/Sub topic (`emergency-alerts`)
+├── Session state snapshots → Firestore
+├── Realtime metrics → Zustand telemetry panel
 └── Distributed rate limits → Redis/Memorystore
 ```
 
@@ -59,9 +62,9 @@ Gemini 2.0 Flash Live (Audio + Vision)
 |---------|-------|
 | **Cloud Run** | Backend hosting (FastAPI WebSocket proxy) |
 | **Vertex AI / Gemini Live API** | Real-time multimodal AI (audio + vision) |
-| **Firestore** | Persistent session memory & user history |
+| **Firestore** | Session state persistence (write-side snapshots/events) |
 | **Pub/Sub** | Emergency alert event bus |
-| **Cloud Storage** | Audio history archival |
+| **Cloud Storage** | Client initialized (ready for archival extension) |
 | **Memorystore (Redis)** | Distributed rate limiting across Cloud Run instances |
 | **Cloud Build** | Automated deployment (IaC) |
 
@@ -81,7 +84,7 @@ Gemini 2.0 Flash Live (Audio + Vision)
 # Install dependencies
 npm install
 
-# Set backend URL (after deploying, or use localhost)
+# Set backend URL (after deploying, or use localhost backend)
 echo "VITE_BACKEND_URL=ws://localhost:8080" > .env.local
 
 # Firebase web config (optional, required only if you want built-in login and WS token issuer flow)
@@ -93,7 +96,7 @@ echo "VITE_FIREBASE_PROJECT_ID=<project-id>" >> .env.local
 # echo "VITE_AUTH_TOKEN_ENDPOINT=http://localhost:8080/auth/ws-token" >> .env.local
 # echo "VITE_WS_AUTH_REQUIRED=off" >> .env.local   # off|on|auto (default auto)
 
-# Run
+# Run frontend (Vite on port 5000 per vite.config.ts)
 npm run dev
 ```
 
@@ -108,13 +111,15 @@ pip install -r requirements.txt
 # Set API key for local dev
 export GEMINI_API_KEY="your-api-key"
 
-# Local dev defaults
+# Recommended local overrides for this repo (Vite runs on :5000).
+# Backend built-in fallback is :5173 if ALLOWED_ORIGINS is not set.
 export WS_AUTH_MODE="off"
-export ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+export ALLOWED_ORIGINS="http://localhost:5000,http://127.0.0.1:5000"
 export AUTH_PROVIDER="firebase"
 # Optional distributed limiter in local:
 # export REDIS_URL="redis://127.0.0.1:6379/0"
 # Optional limiter tuning for realtime voice:
+# export MAX_MESSAGES_PER_MINUTE="240"
 # export MAX_AUDIO_FRAMES_PER_MINUTE="2400"
 # export MAX_AUTH_REQUESTS_PER_MINUTE="30"
 
@@ -151,6 +156,10 @@ export AUTH_PROVIDER="firebase"
 # export REDIS_URL="redis://:<redis-auth>@10.x.x.x:6379/0"
 # export WS_TOKEN_TTL_SECONDS="900"
 # export FIREBASE_CHECK_REVOKED="true"
+# NOTE: deploy.sh currently forwards core auth/redis envs.
+# For advanced quota knobs (MAX_MESSAGES_PER_MINUTE, MAX_AUDIO_FRAMES_PER_MINUTE,
+# MAX_AUTH_REQUESTS_PER_MINUTE, MAX_BYTES_PER_MINUTE, MAX_CONNECTIONS_PER_IP, etc),
+# set them directly on Cloud Run service env vars or extend deploy.sh.
 
 # Optional: make service public only if you know what you are doing
 # export ALLOW_UNAUTHENTICATED="true"
@@ -169,19 +178,20 @@ chmod +x deploy.sh
 | Frontend | React 19, Vite, TypeScript, Firebase Auth SDK, Three.js (3D Orb), Tone.js |
 | Backend | Python 3.12, FastAPI, google-genai SDK, Firebase Admin SDK |
 | AI Model | Gemini 2.0 Flash Live (native audio + vision) |
-| Database | Cloud Firestore (session memory) |
+| Database | Cloud Firestore (session state snapshots/events) |
 | Events | Cloud Pub/Sub (emergency alerts) |
-| Storage | Cloud Storage (audio history) |
+| Storage | Cloud Storage client (extension-ready) |
 | Hosting | Cloud Run (containerized) |
 | Auth | Firebase ID Token → short-lived WS JWT issuer |
 | Rate Limiting | Redis (Memorystore) + local fallback |
+| Runtime Metrics | Zustand telemetry (TTFB/reconnect/auth/vision) |
 
 ---
 
 ## 📂 Project Structure
 
 ```
-Zen16/
+Zen16-main/
 ├── backend/
 │   ├── main.py           # FastAPI + Gemini Live API proxy
 │   ├── scripts/
@@ -190,13 +200,19 @@ Zen16/
 │   └── Dockerfile        # Cloud Run container
 ├── services/
 │   ├── liveAgent.ts      # WebSocket client (bidi-stream)
-│   └── wsAuth.ts         # Firebase ID token -> WS token flow
+│   ├── wsAuth.ts         # Firebase/bridge ID token -> WS token issuer flow
+│   ├── telemetry.ts      # Realtime runtime metrics collector
+│   ├── visionAnalysis.ts # Lightweight camera scan analyzer (placeholder)
+│   └── firebase.ts       # Optional Firebase auth bootstrap
 ├── components/
 │   ├── OrbViz.tsx        # Three.js 3D consciousness orb
 │   ├── BreathingCircle.tsx
 │   ├── EmergencyProtocol.tsx
 │   └── ...
+├── docs/
+│   └── COMPETITION_PLAYBOOK.md
 ├── deploy.sh             # Automated Cloud Run deployment
+├── vite.config.ts        # Manual chunking + dev server config
 ├── App.tsx               # Main application
 └── README.md
 ```

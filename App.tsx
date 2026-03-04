@@ -26,12 +26,12 @@ import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const OrbViz = React.lazy(() => import('./components/OrbViz'));
-const BreathingCircle = React.lazy(() => import('./components/BreathingCircle'));
-const EmergencyProtocol = React.lazy(() => import('./components/EmergencyProtocol'));
-const HistoryPanel = React.lazy(() => import('./components/HistoryPanel'));
-const StressIndicator = React.lazy(() => import('./components/StressIndicator'));
-const ReasoningPanel = React.lazy(() => import('./components/ReasoningPanel'));
-const SettingsSheet = React.lazy(() => import('./components/SettingsSheet'));
+const BreathingCircle = React.lazy(() => import('./components/BreathingCircle').then(module => ({ default: module.BreathingCircle })));
+const EmergencyProtocol = React.lazy(() => import('./components/EmergencyProtocol').then(module => ({ default: module.EmergencyProtocol })));
+const HistoryPanel = React.lazy(() => import('./components/HistoryPanel').then(module => ({ default: module.HistoryPanel })));
+const StressIndicator = React.lazy(() => import('./components/StressIndicator').then(module => ({ default: module.StressIndicator })));
+const ReasoningPanel = React.lazy(() => import('./components/ReasoningPanel').then(module => ({ default: module.ReasoningPanel })));
+const SettingsSheet = React.lazy(() => import('./components/SettingsSheet').then(module => ({ default: module.SettingsSheet })));
 
 export default function App() {
   // --- Global State ---
@@ -297,18 +297,20 @@ export default function App() {
       if (!cancelled) setShouldLoadOrb(true);
     };
 
-    if ('requestIdleCallback' in window) {
+    if (typeof (window as any).requestIdleCallback === 'function') {
       const idleId = (window as any).requestIdleCallback(loadOrb, { timeout: 1200 });
       return () => {
         cancelled = true;
-        (window as any).cancelIdleCallback?.(idleId);
+        if ((window as any).cancelIdleCallback) {
+          (window as any).cancelIdleCallback(idleId);
+        }
       };
     }
 
-    const timer = window.setTimeout(loadOrb, 450);
+    const timer = setTimeout(loadOrb, 450);
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      clearTimeout(timer);
     };
   }, [isOnboardingComplete]);
 

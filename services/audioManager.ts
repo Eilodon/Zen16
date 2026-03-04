@@ -51,6 +51,44 @@ export const floatTo16BitPCM = (float32Array: Float32Array): ArrayBuffer => {
   return buffer;
 };
 
+/**
+ * Downsample Float32 PCM to 16kHz mono using windowed averaging.
+ * This keeps WS payload small and avoids speech-recognition drift when
+ * device AudioContext runs at 44.1kHz/48kHz.
+ */
+export const downsampleTo16kMono = (
+  input: Float32Array,
+  inputSampleRate: number
+): Float32Array => {
+  if (!input.length) return input;
+  if (inputSampleRate <= 0) return input;
+  if (inputSampleRate === 16000) return input;
+
+  const ratio = inputSampleRate / 16000;
+  const outputLength = Math.max(1, Math.floor(input.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < outputLength) {
+    const nextOffsetBuffer = Math.min(
+      input.length,
+      Math.round((offsetResult + 1) * ratio)
+    );
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer; i++) {
+      accum += input[i];
+      count++;
+    }
+    output[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+
+  return output;
+};
+
 export const base64EncodeAudio = (float32Array: Float32Array): string => {
   const pcm = floatTo16BitPCM(float32Array);
   let binary = '';

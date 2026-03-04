@@ -39,9 +39,14 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // --- BYPASS LOCALHOST FOR VITE DEV SERVER PWS ISSUES ---
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return; // Pass through to network normally
+  }
+
   // --- STRATEGY 1: CACHE FIRST (For Immutable Libraries & Assets) ---
   if (
-    url.hostname.includes('aistudiocdn.com') || 
+    url.hostname.includes('aistudiocdn.com') ||
     url.hostname.includes('cdn.tailwindcss.com') ||
     url.hostname.includes('esm.sh') ||
     url.hostname.includes('fonts.googleapis.com') ||
@@ -75,7 +80,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       const cachedResponse = await cache.match(event.request);
-      
+
       const fetchPromise = fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           cache.put(event.request, networkResponse.clone());
