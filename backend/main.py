@@ -23,7 +23,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocketState
 from pydantic import BaseModel
 
-from orchestrator import CognitiveOrchestrator
+try:
+    from .orchestrator import CognitiveOrchestrator
+except ImportError:
+    from orchestrator import CognitiveOrchestrator
 
 try:
     import firebase_admin
@@ -536,6 +539,77 @@ def _spawn_background_task(coro, bucket: set[asyncio.Task]):
 
     task.add_done_callback(_cleanup)
 
+
+def _save_session_event_sync(session_id: str, event_data: dict):
+    if not firestore_db:
+        return
+    try:
+        doc_ref = firestore_db.collection("sessions").document(session_id)
+        doc_ref.set(event_data, merge=True)
+    except Exception as exc:
+        logger.warning(f"Firestore write error: {exc}")
+
+
+async def save_session_event_async(session_id: str, event_data: dict):
+    await asyncio.to_thread(_save_session_event_sync, session_id, event_data)
+
+
+def _log_pubsub_result(future, message: str):
+    try:
+        message_id = future.result()
+        logger.info(f"[Tool] Emergency alert queued. message_id={message_id}, message={message}")
+    except Exception as exc:
+        logger.error(f"[Tool] Emergency alert publish failed: {exc}")
+
+
+def _function_call_name_args(function_call) -> tuple[str, dict]:
+    name = getattr(function_call, "name", "") or ""
+    raw_args = getattr(function_call, "args", None)
+
+    if raw_args is None:
+        return name, {}
+    if isinstance(raw_args, dict):
+        return name, dict(raw_args)
+    if isinstance(raw_args, str):
+        try:
+            parsed = json.loads(raw_args)
+            if isinstance(parsed, dict):
+                return name, parsed
+        except json.JSONDecodeError:
+            return name, {}
+    try:
+        return name, dict(raw_args)
+    except Exception:
+        return name, {}
+
+
+async def execute_tool_async(function_call) -> dict:
+    name, args = _function_call_name_args(function_call)
+
+    if name == "update_zen_state":
+        emotion = args.get("emotion")
+        logger.info(f"[Tool] update_zen_state emotion={emotion}")
+        return {"result": "UI updated", "state": args}
+
+    if name == "trigger_emergency_alert":
+        msg = str(args.get("message") or "Emergency detected")
+        severity = str(args.get("severity") or "warning")
+
+        if publisher and PROJECT_ID:
+            try:
+                topic_path = publisher.topic_path(PROJECT_ID, "emergency-alerts")
+                future = publisher.publish(
+                    topic_path,
+                    msg.encode("utf-8"),
+                    severity=severity,
+                )
+                future.add_done_callback(lambda done: _log_pubsub_result(done, msg))
+                return {"result": "Alert queued", "severity": severity}
+            except Exception as exc:
+                logger.error(f"[Tool] Alert failed to queue: {exc}")
+                return {"result": f"Alert failed: {exc}"}
+
+        return {"result": "Pub/Sub not configured"}
 
     return {"result": f"Unknown tool: {name}"}
 

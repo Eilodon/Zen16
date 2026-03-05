@@ -33,6 +33,38 @@ export function usePermissions() {
   };
 
   /**
+   * Request camera with resilient constraints for desktop/mobile diversity.
+   */
+  const getVideoStreamSafe = async (preferredFacing: 'user' | 'environment' = 'user') => {
+    const fallbackFacing: 'user' | 'environment' =
+      preferredFacing === 'user' ? 'environment' : 'user';
+
+    const attempts: MediaStreamConstraints[] = [
+      { video: { facingMode: { ideal: preferredFacing } } },
+      { video: { facingMode: { ideal: fallbackFacing } } },
+      { video: true },
+    ];
+
+    let lastError: unknown = null;
+    for (const constraints of attempts) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error: any) {
+        lastError = error;
+        const shouldTryNext =
+          error?.name === 'OverconstrainedError' ||
+          error?.name === 'NotFoundError' ||
+          error?.name === 'ConstraintNotSatisfiedError';
+        if (!shouldTryNext) {
+          throw error;
+        }
+      }
+    }
+
+    throw lastError;
+  };
+
+  /**
    * Unified Request Handler
    */
   const requestMediaAccess = useCallback(async (useMic: boolean, useCamera: boolean) => {
@@ -47,55 +79,54 @@ export function usePermissions() {
 
     try {
       console.log(`[Permissions] Requesting - Mic: ${useMic}, Cam: ${useCamera}`);
-      
-      let stream: MediaStream | null = null;
+      const acquiredStreams: MediaStream[] = [];
+      let micGranted = !useMic;
+      let cameraGranted = !useCamera;
 
-      // Request logic split to handle partial failures gracefully
-      if (useMic && useCamera) {
-          // Try both
-          try {
-             // Combine constraints (Ideal scenario)
-             stream = await navigator.mediaDevices.getUserMedia({
-                 audio: { echoCancellation: true, noiseSuppression: true },
-                 video: { facingMode: 'environment' }
-             });
-          } catch (e) {
-             console.warn("[Permissions] Combined request failed, falling back to separate requests.");
-             // Fallback strategy could go here, but for simplicity in 'Loading' phase, 
-             // we prioritze Audio if mixed fails.
-             stream = await getAudioStreamSafe();
-             // Mark camera as failed silently here to allow app entry
-             useCamera = false; 
-             setCameraStatus('denied');
-          }
-      } else if (useMic) {
-          stream = await getAudioStreamSafe();
-      } else if (useCamera) {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (useMic) {
+        try {
+          const audioStream = await getAudioStreamSafe();
+          acquiredStreams.push(audioStream);
+          micGranted = true;
+        } catch (micErr) {
+          console.warn("[Permissions] Mic request failed", micErr);
+          micGranted = false;
+        }
       }
 
-      if (stream) {
-          // Success Handling
-          if (useMic) {
-            setMicStatus('granted');
-            // Warm up Audio Context
-            try {
-              const ctx = await getSharedAudioContext();
-              if (ctx.state === 'suspended') {
-                await ctx.resume();
-              }
-            } catch (ctxErr) {
-              console.warn("AudioContext resume warning:", ctxErr);
-            }
-          }
-          
-          if (useCamera) {
-            setCameraStatus('granted');
-          }
+      if (useCamera) {
+        try {
+          const cameraStream = await getVideoStreamSafe('user');
+          acquiredStreams.push(cameraStream);
+          cameraGranted = true;
+        } catch (camErr) {
+          console.warn("[Permissions] Camera request failed", camErr);
+          cameraGranted = false;
+        }
+      }
 
-          // Important: Stop tracks to release hardware locks on mobile
-          stream.getTracks().forEach(t => t.stop());
-          console.log("[Permissions] Access Granted & Hardware Released");
+      if (useMic) setMicStatus(micGranted ? 'granted' : 'denied');
+      if (useCamera) setCameraStatus(cameraGranted ? 'granted' : 'denied');
+
+      if (micGranted) {
+        // Warm up AudioContext while still inside user gesture path.
+        try {
+          const ctx = await getSharedAudioContext();
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+        } catch (ctxErr) {
+          console.warn("AudioContext resume warning:", ctxErr);
+        }
+      }
+
+      acquiredStreams.forEach((stream) => {
+        stream.getTracks().forEach((track) => track.stop());
+      });
+      console.log("[Permissions] Access flow completed & hardware released");
+
+      if (useMic && !micGranted) {
+        setInputMode('text');
       }
 
     } catch (e: any) {
@@ -133,7 +164,7 @@ export function usePermissions() {
     
     setCameraStatus('prompting');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await getVideoStreamSafe('environment');
       setCameraStatus('granted');
       stream.getTracks().forEach(t => t.stop());
       return true;

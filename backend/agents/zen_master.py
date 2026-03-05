@@ -99,7 +99,7 @@ TRIGGER_ALERT_DECL = types.FunctionDeclaration(
 
 zen_master_agent = LlmAgent(
     name="ZenMaster",
-    model="gemini-2.5-flash-native-audio-preview-09-2025",
+    model=LIVE_MODEL,
     instruction=SYSTEM_INSTRUCTION,
 )
 

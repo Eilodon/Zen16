@@ -30,7 +30,14 @@ export const CameraScan: React.FC<Props> = ({ onModeChange, currentMode }) => {
 
     if (granted) {
       try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        let s: MediaStream;
+        try {
+          s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } }
+          });
+        } catch {
+          s = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
         streamRef.current = s;
         setIsOpen(true);
       } catch (err: any) {
