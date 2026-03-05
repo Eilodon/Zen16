@@ -687,7 +687,6 @@ async def live_stream(websocket: WebSocket, token: Optional[str] = Query(default
 
     await websocket.accept()
     session_id = f"session_{id(websocket)}"
-    session_deadline = time.monotonic() + MAX_SESSION_SECONDS
     background_tasks: set[asyncio.Task] = set()
 
     logger.info(f"[WS] Client connected: {session_id} ip={client_ip}")
@@ -744,6 +743,8 @@ async def live_stream(websocket: WebSocket, token: Optional[str] = Query(default
 # ─── Health Check ─────────────────────────────────────────────
 @app.get("/")
 def health():
+    """Minimal health response. Does NOT expose rate-limit params to avoid
+    leaking abuse budget info to untrusted callers."""
     return {
         "status": "running",
         "service": "Zen16 Guardian Backend",
@@ -751,14 +752,6 @@ def health():
         "security": {
             "auth_required": WS_AUTH_REQUIRED,
             "auth_provider": AUTH_PROVIDER,
-            "origins": ALLOWED_ORIGINS,
-            "max_connections_per_ip": MAX_CONNECTIONS_PER_IP,
-            "max_control_messages_per_minute": MAX_CONTROL_MESSAGES_PER_MINUTE,
-            "max_audio_frames_per_minute": MAX_AUDIO_FRAMES_PER_MINUTE,
-            "max_bytes_per_minute": MAX_BYTES_PER_MINUTE,
-            "max_auth_requests_per_minute": MAX_AUTH_REQUESTS_PER_MINUTE,
-            "max_session_seconds": MAX_SESSION_SECONDS,
-            "distributed_rate_limit": redis_client is not None,
         },
         "gcp_services": {
             "firestore": firestore_db is not None,

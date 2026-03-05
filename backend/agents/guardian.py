@@ -1,6 +1,9 @@
 """
 Guardian Agent — watches Vision/Telemetry telemetry sent from the frontend
 and decides when to fire a proactive intervention into the ZenMaster stream.
+
+Uses a single reusable ADK session per process to avoid accumulating
+InMemoryRunner sessions on high-frequency telemetry (every ~10s).
 """
 
 import json
@@ -43,21 +46,36 @@ _guardian_runner = InMemoryRunner(
     agent=_guardian_agent,
 )
 
+# Reusable session — avoids creating a new session per telemetry evaluation.
+_cached_session = None
+_GUARDIAN_USER_ID = "guardian_eval"
+
+
+async def _get_or_create_session():
+    """Return a cached ADK session, creating one on first call."""
+    global _cached_session
+    if _cached_session is not None:
+        return _cached_session
+
+    session_svc = _guardian_runner.session_service
+    _cached_session = await session_svc.create_session(
+        app_name="zen16_guardian",
+        user_id=_GUARDIAN_USER_ID,
+    )
+    return _cached_session
+
+
 async def evaluate_telemetry(telemetry_text: str) -> dict:
     """
     Send telemetry data to the GuardianAgent and parse its response.
     Returns a dict like: {requires_interruption: bool, suggested_context_injection: str}
     """
     try:
-        session_svc = _guardian_runner.session_service
-        session = await session_svc.create_session(
-            app_name="zen16_guardian",
-            user_id="guardian_eval",
-        )
+        session = await _get_or_create_session()
 
         result_text = ""
         async for event in _guardian_runner.run_async(
-            user_id="guardian_eval",
+            user_id=_GUARDIAN_USER_ID,
             session_id=session.id,
             new_message=genai_types.Content(
                 role="user",
@@ -82,4 +100,7 @@ async def evaluate_telemetry(telemetry_text: str) -> dict:
         }
     except Exception as e:
         logger.warning(f"[Guardian] Evaluation failed: {e}")
+        # Reset session on failure so the next call creates a fresh one
+        global _cached_session
+        _cached_session = None
         return {"requires_interruption": False, "suggested_context_injection": ""}

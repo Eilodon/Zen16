@@ -182,10 +182,10 @@ export class ZenLiveSession {
                 },
                 video: this.enableVision
                     ? {
-                          facingMode: { ideal: "user" },
-                          width: { ideal: 640 },
-                          height: { ideal: 480 },
-                      }
+                        facingMode: { ideal: "user" },
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                    }
                     : false,
             };
             try {
@@ -366,7 +366,7 @@ export class ZenLiveSession {
         try {
             const { FilesetResolver, FaceLandmarker } = await import('@mediapipe/tasks-vision');
             const vision = await FilesetResolver.forVisionTasks(
-                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
             );
             this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
                 baseOptions: {
@@ -618,20 +618,6 @@ export class ZenLiveSession {
         source.onended = () => {
             this.sourceNodes.delete(source);
         };
-    }
-
-    private decodeBase64ToFloat32(base64: string): Float32Array {
-        const binaryString = atob(base64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++)
-            bytes[i] = binaryString.charCodeAt(i);
-        const int16 = new Int16Array(bytes.buffer);
-        const float32 = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) {
-            float32[i] = int16[i] / 32768.0;
-        }
-        return float32;
     }
 
     private decodeInt16ToFloat32(buffer: ArrayBuffer): Float32Array {

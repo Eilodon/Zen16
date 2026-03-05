@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Build the backend and serve both
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 
 # Install backend dependencies
@@ -15,13 +15,13 @@ COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY backend ./backend
+COPY backend/ .
 
-# Copy built frontend from Stage 1 into the backend's static file routing path
-COPY --from=frontend-build /app/dist ./backend/static
+# Copy built frontend from Stage 1 into the static file routing path
+COPY --from=frontend-build /app/dist ./static
 
 # Expose Cloud Run port
 EXPOSE 8080
 
-# Run FastAPI app with Uvicorn
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run FastAPI app with Uvicorn — WORKDIR is /app which IS the backend dir
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
